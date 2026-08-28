@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Campus Copilot - Admin</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="logo">Campus Copilot — Admin</div>
+  <div class="tagline">Manage complaints & post announcements</div>
+  <div class="topbar-user">
+    <a href="/student/login" class="ghost-link">Student view</a>
+    <a href="/admin/login-history" class="ghost-link">Login history</a>
+    <button id="admin-logout-btn" class="ghost">Log Out</button>
+  </div>
+</header>
+
+<main class="admin-layout">
+
+  <section class="card">
+    <div class="card-header-row">
+      <h3>All Complaints</h3>
+      <button id="refresh-btn" class="ghost-dark">Refresh</button>
+    </div>
+    <div id="admin-complaints-list" class="list"></div>
+  </section>
+
+  <section class="card">
+    <div class="card-header-row">
+      <h3>Lost & Found</h3>
+      <button id="refresh-lf-btn" class="ghost-dark">Refresh</button>
+    </div>
+    <div id="admin-lostfound-list" class="list"></div>
+  </section>
+
+  <section class="card">
+    <h3>Post an Event / Announcement</h3>
+    <form id="event-form" class="stack">
+      <input id="event-title" type="text" placeholder="Title" required>
+      <input id="event-description" type="text" placeholder="Description">
+      <input id="event-date" type="text" placeholder="Date (e.g. 20 Aug 2026)">
+      <button type="submit" class="primary">Post Event</button>
+    </form>
+    <div id="admin-events-list" class="list"></div>
+  </section>
+
+</main>
+
+<script src="{{ url_for('static', filename='admin.js') }}"></script>
+</body>
+</html>

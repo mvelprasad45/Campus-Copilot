@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Campus Copilot - Admin Login</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<section class="auth-page admin-auth-page">
+  <div class="auth-layout">
+    <div class="auth-intro">
+      <div class="auth-brand"><span class="brand-mark">CC</span><span>Campus Copilot</span></div>
+      <p class="auth-kicker">ADMIN PORTAL</p>
+      <h2>Manage your campus,<br><span>with confidence.</span></h2>
+      <p class="auth-intro-copy">Securely manage campus services, complaints, announcements, events, and student requests from one place.</p>
+      <p class="support-line">Need help? <a href="mailto:support@college.edu">Contact support</a><br><span>support@college.edu</span></p>
+    </div>
+
+    <div class="login-card auth-card admin-auth-card">
+      <p class="eyebrow">ADMIN ACCESS</p>
+      <h1>Welcome back, Admin</h1>
+      <p class="tagline-dark">Sign in to manage your campus.</p>
+      <form id="admin-login-form" class="stack">
+        <label for="admin-login-email">Admin email</label>
+        <input id="admin-login-email" type="email" autocomplete="username" placeholder="admin@college.edu" required>
+        <label for="admin-login-password">Password</label>
+        <div class="password-input">
+          <input id="admin-login-password" type="password" autocomplete="current-password" placeholder="Enter your password" required>
+          <button type="button" class="password-toggle" data-target="admin-login-password" aria-label="Show password">&#128065;</button>
+        </div>
+        <button type="submit" class="primary">Sign In</button>
+      </form>
+      <p id="admin-login-error" class="error-text admin-auth-error hidden" role="alert"></p>
+      <p class="auth-switch">Are you a student? <a href="/student/login">Student Login</a></p>
+      <p class="auth-switch support-mobile"><a href="mailto:support@college.edu">Need help? Contact support</a></p>
+    </div>
+  </div>
+  <div class="auth-visual" aria-hidden="true">
+    <div class="visual-grid"></div>
+    <div class="visual-window">
+      <div class="visual-window-bar"><span></span><span></span><span></span></div>
+      <img src="{{ url_for('static', filename='campus_map.jpg') }}" alt="">
+      <div class="visual-pin">+</div>
+    </div>
+    <div class="visual-label">ONE CAMPUS<br><strong>ONE PLATFORM</strong></div>
+  </div>
+  <footer class="auth-footer">© 2026 College Portal <span>|</span> <a href="/student/login">Student Login</a></footer>
+</section>
+<script src="{{ url_for('static', filename='admin_login.js') }}"></script>
+</body>
+</html>

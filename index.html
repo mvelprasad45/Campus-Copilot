@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Campus Copilot</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<!-- Dedicated authentication page shown until the student has a verified session. -->
+<section id="login-screen" class="auth-page">
+  <div class="auth-layout">
+    <div class="auth-intro">
+      <div class="auth-brand"><span class="brand-mark">CC</span><span>Campus Copilot</span></div>
+      <p class="auth-kicker">COLLEGE PORTAL</p>
+      <h2>Your campus,<br><span>connected.</span></h2>
+      <p class="auth-intro-copy">Access campus services, report issues, and stay connected with everything happening around you.</p>
+      <p class="support-line">Need help? <a href="mailto:support@college.edu">Contact support</a><br><span>support@college.edu</span></p>
+    </div>
+
+    <div class="login-card auth-card">
+    <div id="auth-login-view" class="auth-view">
+      <p class="eyebrow">STUDENT PORTAL</p>
+      <h1>User Login</h1>
+      <p class="tagline-dark">Sign in to your campus workspace.</p>
+      <form id="login-form" class="stack">
+        <label for="login-name">Name</label>
+        <input id="login-name" type="text" placeholder="Your full name" required>
+        <label for="login-password">Password</label>
+        <div class="password-input"><input id="login-password" type="password" placeholder="Enter your password" required><button type="button" class="password-toggle" data-target="login-password" aria-label="Show password">&#128065;</button></div>
+        <button type="submit" class="primary">Sign in</button>
+      </form>
+      <p id="login-error" class="error-text hidden"></p>
+      <p class="auth-switch"><a href="#" id="show-reset-link">Forgot password?</a></p>
+      <p class="auth-switch">Not a student? <a href="/admin/login">Admin Login</a></p>
+      <p class="auth-switch">New here? <a href="#" id="show-register-link">Sign up</a></p>
+      <p class="auth-switch support-mobile"><a href="mailto:support@college.edu">Need help? Contact support</a></p>
+    </div>
+
+    <div id="auth-register-view" class="auth-view hidden">
+      <p class="eyebrow">GET STARTED</p>
+      <h1>Create your account</h1>
+      <p class="tagline-dark">Use your official college details.</p>
+      <form id="register-form" class="stack">
+        <label for="register-name">Full name</label>
+        <input id="register-name" type="text" placeholder="Your full name" required>
+        <label for="register-roll">Roll number</label>
+        <input id="register-roll" type="text" placeholder="e.g. 22CSE101" required>
+        <label for="register-email">College email</label>
+        <input id="register-email" type="email" placeholder="you@college.edu" required>
+        <label for="register-password">Password</label>
+        <div class="password-input"><input id="register-password" type="password" placeholder="At least 8 characters" required minlength="8"><button type="button" class="password-toggle" data-target="register-password" aria-label="Show password">&#128065;</button></div>
+        <div class="password-strength"><div class="strength-track"><div id="register-strength-bar" class="strength-bar"></div></div><span id="register-strength-label">Use 8+ characters</span></div>
+        <label for="register-confirm-password">Confirm password</label>
+        <div class="password-input"><input id="register-confirm-password" type="password" placeholder="Repeat your password" required minlength="8"><button type="button" class="password-toggle" data-target="register-confirm-password" aria-label="Show password">&#128065;</button></div>
+        <p id="register-password-error" class="field-error hidden"></p>
+        <button type="submit" class="primary">Create Account</button>
+      </form>
+      <p id="register-error" class="error-text hidden"></p>
+      <p class="auth-switch">Already have an account? <a href="#" id="show-login-link">Log in</a></p>
+    </div>
+
+    <div id="auth-verify-view" class="auth-view hidden">
+      <p class="eyebrow">EMAIL VERIFICATION</p>
+      <h1>Verify your college email</h1>
+      <p class="tagline-dark">We sent a 6-digit code to <strong id="masked-email"></strong></p>
+      <form id="verify-form" class="stack">
+        <label for="verify-code">Verification code</label>
+        <input id="verify-code" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="000000" required>
+        <p id="verify-countdown" class="countdown">Code expires in 05:00</p>
+        <button type="submit" class="primary">Verify Email</button>
+      </form>
+      <p id="verify-message" class="tagline-dark hidden"></p>
+      <p id="verify-error" class="error-text hidden"></p>
+      <p class="auth-switch"><a href="#" id="resend-verify-link">Didn't receive the code? Resend code</a></p>
+      <p class="auth-switch"><a href="#" id="show-verify-login-link">Back to Login</a></p>
+    </div>
+
+    <div id="auth-reset-view" class="auth-view hidden">
+      <p class="eyebrow">ACCOUNT RECOVERY</p>
+      <h1>Reset your password</h1>
+      <form id="reset-request-form" class="stack">
+        <label for="reset-email">Step 1: Registered college email</label>
+        <input id="reset-email" type="email" placeholder="you@college.edu" required>
+        <button type="submit" class="primary">Send verification code</button>
+      </form>
+      <form id="reset-form" class="stack hidden">
+        <label for="reset-code">Step 2: Verification code</label>
+        <input id="reset-code" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="000000" required>
+        <p class="auth-switch"><a href="#" id="resend-reset-link">Resend code</a></p>
+        <label for="reset-password">Step 3: New password</label>
+        <div class="password-input"><input id="reset-password" type="password" placeholder="At least 8 characters" required minlength="8"><button type="button" class="password-toggle" data-target="reset-password" aria-label="Show password">&#128065;</button></div>
+        <div class="password-strength"><div class="strength-track"><div id="reset-strength-bar" class="strength-bar"></div></div><span id="reset-strength-label">Use 8+ characters</span></div>
+        <label for="reset-confirm-password">Confirm new password</label>
+        <div class="password-input"><input id="reset-confirm-password" type="password" placeholder="Repeat your password" required minlength="8"><button type="button" class="password-toggle" data-target="reset-confirm-password" aria-label="Show password">&#128065;</button></div>
+        <p id="reset-password-error" class="field-error hidden"></p>
+        <button type="submit" class="primary">Reset Password</button>
+      </form>
+      <p id="reset-error" class="error-text hidden"></p>
+      <p class="auth-switch"><a href="#" id="show-reset-login-link">Remember your password? Back to Login</a></p>
+    </div>
+    </div>
+  </div>
+  <div class="auth-visual" aria-hidden="true">
+    <div class="visual-grid"></div>
+    <div class="visual-window">
+      <div class="visual-window-bar"><span></span><span></span><span></span></div>
+      <img src="{{ url_for('static', filename='campus_map.jpg') }}" alt="">
+      <div class="visual-pin">+</div>
+    </div>
+    <div class="visual-label">ONE CAMPUS<br><strong>ONE PLATFORM</strong></div>
+  </div>
+  <footer class="auth-footer">© 2026 College Portal <span>|</span> <a href="#">Privacy Policy</a> <span>|</span> <a href="/admin/login">Admin Portal</a></footer>
+</section>
+
+<div id="app-shell" class="hidden">
+
+<header class="topbar">
+  <div class="logo">Campus Copilot</div>
+  <div class="tagline">One Campus. One Assistant. One Platform.</div>
+  <div class="topbar-user">
+    <span id="current-user-label"></span>
+    <button id="switch-user-btn" class="ghost">Switch User</button>
+    <a href="/admin" class="ghost-link">Admin</a>
+  </div>
+</header>
+
+<main class="layout">
+
+  <!-- LEFT: nav / menu card -->
+  <section class="card">
+    <h2 id="hello-heading">Hello, Student 👋</h2>
+    <nav class="menu">
+      <button class="menu-item active" data-tab="assistant">💬 Ask Campus Copilot</button>
+      <button class="menu-item" data-tab="complaints">📋 My Complaints</button>
+      <button class="menu-item" data-tab="lostfound">🔎 Lost & Found</button>
+      <button class="menu-item" data-tab="events">📢 Events & Announcements</button>
+      <button class="menu-item" data-tab="map">🗺️ Campus Map</button>
+    </nav>
+  </section>
+
+  <!-- RIGHT: active panel -->
+  <section class="card panel">
+
+    <!-- Assistant tab -->
+    <div id="tab-assistant" class="tab-content active">
+      <h3>Campus Copilot</h3>
+      <div id="chat-log" class="chat-log"></div>
+      <form id="assistant-form" class="row">
+        <input id="assistant-input" type="text" placeholder="e.g. The projector in Room 204 is not working" required>
+        <button type="submit">Ask</button>
+      </form>
+
+      <div id="suggestion-box" class="suggestion hidden">
+        <p><strong>Intent:</strong> <span id="sugg-intent"></span></p>
+        <p><strong>Category:</strong> <span id="sugg-category"></span></p>
+        <p><strong>Priority:</strong> <span id="sugg-priority"></span></p>
+        <p><strong>Suggested department:</strong> <span id="sugg-department"></span></p>
+        <p><strong>Next action:</strong> <span id="sugg-action"></span></p>
+        <button id="submit-complaint-btn" class="primary">Submit as Complaint</button>
+      </div>
+    </div>
+
+    <!-- Complaints tab -->
+    <div id="tab-complaints" class="tab-content">
+      <h3>My Complaints</h3>
+      <div id="complaints-list" class="list"></div>
+    </div>
+
+    <!-- Lost & Found tab -->
+    <div id="tab-lostfound" class="tab-content">
+      <h3>Lost & Found</h3>
+      <form id="lostfound-form" class="stack">
+        <select id="lf-type">
+          <option value="Lost">I lost something</option>
+          <option value="Found">I found something</option>
+        </select>
+        <input id="lf-name" type="text" placeholder="Item name (e.g. Blue water bottle)" required>
+        <input id="lf-location" type="text" placeholder="Location">
+        <input id="lf-contact" type="text" placeholder="Your contact info">
+        <button type="submit" class="primary">Report Item</button>
+      </form>
+      <div id="lostfound-list" class="list"></div>
+    </div>
+
+    <!-- Events tab -->
+    <div id="tab-events" class="tab-content">
+      <h3>Events & Announcements</h3>
+      <div id="events-list" class="list"></div>
+    </div>
+
+    <!-- Campus Map tab -->
+    <div id="tab-map" class="tab-content">
+      <h3>Campus Map</h3>
+      <p class="map-hint">Tap "Where Am I?" to find your live location, then pick where you want to go.</p>
+
+      <div class="map-controls">
+        <button id="map-locate-btn" class="primary">📍 Where Am I?</button>
+        <select id="map-to"><option value="">Guide me to...</option></select>
+        <button id="map-show-path" class="ghost-dark">Go</button>
+        <button id="map-clear-path" class="ghost-dark">Clear</button>
+      </div>
+      <p id="map-locate-status" class="map-hint hidden"></p>
+
+      <div id="map-container" class="map-container">
+        <img id="campus-map-img" src="{{ url_for('static', filename='campus_map.jpg') }}" alt="Campus Map">
+        <svg id="map-svg" class="map-svg"></svg>
+        <div id="map-pins"></div>
+      </div>
+
+      <div id="map-info-box" class="map-info-box hidden"></div>
+    </div>
+
+  </section>
+</main>
+
+<script src="{{ url_for('static', filename='script.js') }}"></script>
+</div>
+</body>
+</html>

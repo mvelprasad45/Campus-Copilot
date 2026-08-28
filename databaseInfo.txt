@@ -1,0 +1,7 @@
+Mozilla/5.0 (Windows NT 10.0; Win64; x64)
+AppleWebKit/537.36 (KHTML, like Gecko)
+Chrome/151.0.0.0
+Safari/537.36
+
+"This user is accessing CampusCopilot
+ from a 64-bit Windows computer using Google Chrome version 151." 😎
