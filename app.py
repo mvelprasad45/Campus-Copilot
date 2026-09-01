@@ -54,7 +54,7 @@ app = Flask(__name__, template_folder=".", static_folder=".", static_url_path="/
 # In production this MUST come from the environment. If it isn't set, anyone
 # who can guess/read the fallback value could forge session cookies -
 # including one that claims {"is_admin": True}.
-_env_secret = os.environ.get("SECRET_KEY")
+_env_secret = os.getenv("SECRET_KEY")
 if _env_secret:
     app.secret_key = _env_secret
 elif DEBUG:
@@ -73,7 +73,14 @@ else:
 
 # Cookies should never be sent over plain HTTP once this is live on a real
 # domain. Only relax this for local http://localhost development.
-app.config["SESSION_COOKIE_SECURE"] = not DEBUG
+# Override with SESSION_COOKIE_SECURE=0|1 in .env if needed.
+_cookie_secure_env = os.environ.get("SESSION_COOKIE_SECURE", "").strip().lower()
+if _cookie_secure_env in ("1", "true", "yes"):
+    app.config["SESSION_COOKIE_SECURE"] = True
+elif _cookie_secure_env in ("0", "false", "no"):
+    app.config["SESSION_COOKIE_SECURE"] = False
+else:
+    app.config["SESSION_COOKIE_SECURE"] = not DEBUG
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
@@ -232,8 +239,41 @@ def init_db():
                 "ON login_history (user_type, user_id)"
             )
 
-            cur.execute("SELECT id FROM admins LIMIT 1")
-            if not cur.fetchone():
+            # Migrations for Admin Dashboard
+            cur.execute("ALTER TABLE admins ADD COLUMN IF NOT EXISTS admin_id TEXT UNIQUE")
+            cur.execute("UPDATE admins SET admin_id = 'ADMIN-001' WHERE admin_id IS NULL AND id = 1")
+
+            cur.execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS event_id TEXT UNIQUE")
+            cur.execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS start_time TEXT")
+            cur.execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS end_time TEXT")
+            cur.execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS venue TEXT")
+            cur.execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS organizer TEXT")
+            cur.execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS department TEXT")
+            cur.execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS category TEXT")
+            cur.execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS image_url TEXT")
+            cur.execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS registration_url TEXT")
+            cur.execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS max_participants INTEGER")
+            cur.execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'published'")
+            cur.execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS created_by INTEGER")
+            cur.execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ")
+
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS announcements (
+                    id BIGSERIAL PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    status TEXT DEFAULT 'draft',
+                    created_by INTEGER NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMPTZ
+                )
+                """
+            )
+
+            cur.execute("SELECT id, email, password_hash FROM admins ORDER BY id LIMIT 1")
+            existing_admin = cur.fetchone()
+            if not existing_admin:
                 cur.execute(
                     "INSERT INTO admins (name, email, password_hash, role, created_at) "
                     "VALUES (%s, %s, %s, %s, %s)",
@@ -245,6 +285,21 @@ def init_db():
                         datetime.now(),
                     ),
                 )
+            else:
+                # Keep the bootstrap admin's credentials in sync with the
+                # current ADMIN_EMAIL / ADMIN_PASSWORD environment variables.
+                # Without this, changing .env after the admin row was first
+                # seeded would leave stale credentials in the database,
+                # causing correct .env credentials to be rejected at login.
+                credentials_changed = (
+                    existing_admin["email"] != ADMIN_EMAIL
+                    or not check_password_hash(existing_admin["password_hash"], ADMIN_PASSWORD)
+                )
+                if credentials_changed:
+                    cur.execute(
+                        "UPDATE admins SET email = %s, password_hash = %s WHERE id = %s",
+                        (ADMIN_EMAIL, generate_password_hash(ADMIN_PASSWORD), existing_admin["id"]),
+                    )
         conn.commit()
     except Exception:
         conn.rollback()
@@ -405,12 +460,21 @@ def classify_with_ai(text: str):
     model_name = get_working_gemini_model()  # e.g. "models/gemini-2.5-flash-lite"
     url = f"https://generativelanguage.googleapis.com/v1beta/{model_name}:generateContent"
 
-    prompt = f"""You are classifying a student complaint for a campus helpdesk.
+    prompt = f"""You are classifying a student query for a campus helpdesk AI assistant.
 
+Intents (pick exactly one): complaint, lost_found, event_search, campus_service, navigation, general
 Categories (pick exactly one): {", ".join(VALID_CATEGORIES)}
 Priorities (pick exactly one): {", ".join(VALID_PRIORITIES)}
 
-Complaint: "{text}"
+Query: "{text}"
+
+Guidelines:
+- If the query is a greeting or asks about the AI itself (e.g., "hello", "who are you", "what are you"), classify as "general"
+- If the query is about a specific campus problem/issue, classify as "complaint"
+- If the query is about lost/found items, classify as "lost_found"
+- If the query is about campus events, classify as "event_search"
+- If the query is about campus services, classify as "campus_service"
+- If the query is about directions/location, classify as "navigation"
 
 Reply with ONLY a JSON object, no other text, in this exact format:
 {{"intent": "complaint", "category": "...", "priority": "...", "suggested_department": "...", "next_action": "..."}}"""
@@ -448,6 +512,8 @@ def classify_with_keywords(text: str):
         return {"intent": "event_search", "category": "General Enquiry", "priority": "Low", "suggested_department": "Student Affairs", "next_action": "view_events"}
     if any(word in lower for word in ["where", "directions", "navigate", "location"]):
         return {"intent": "navigation", "category": "General Enquiry", "priority": "Low", "suggested_department": "Campus Helpdesk", "next_action": "open_map"}
+    if any(word in lower for word in ["hello", "hi ", "hey", "who are you", "what are you", "help", "support", "assistant"]):
+        return {"intent": "general", "category": "General Enquiry", "priority": "Low", "suggested_department": "Campus Helpdesk", "next_action": "general_inquiry"}
 
     category = "General Enquiry"
     for cat, keywords in CATEGORY_RULES.items():
@@ -848,7 +914,15 @@ def admin_me():
     admin = current_admin()
     if not admin:
         return jsonify({"error": "Not logged in"}), 401
-    return jsonify({"is_admin": True, "email": admin["email"], "role": admin["role"]})
+    return jsonify({
+        "is_admin": True,
+        "admin_id": admin.get("admin_id"),
+        "name": admin.get("name"),
+        "email": admin["email"],
+        "role": admin["role"],
+        "status": "Active" if admin.get("is_active") else "Inactive",
+        "created_at": admin.get("created_at")
+    })
 
 
 def current_admin():
@@ -867,7 +941,7 @@ def current_admin():
 
 def require_admin():
     admin = current_admin()
-    return admin is not None and admin["role"] == "admin"
+    return admin is not None and admin["role"] in ("admin", "super_admin")
 
 
 @app.route("/admin/login-history")
@@ -1122,22 +1196,35 @@ def create_lost_found():
 def get_events():
     conn = get_db()
     cur = conn.cursor()
+    cur.execute("SELECT * FROM events WHERE status = 'published' ORDER BY id DESC")
+    rows = cur.fetchall()
+    conn.close()
+    return jsonify([dict(r) for r in rows])
+
+@app.route("/api/admin/events", methods=["GET"])
+def admin_get_events():
+    if not require_admin():
+        return jsonify({"error": "Not logged in as admin"}), 401
+    conn = get_db()
+    cur = conn.cursor()
     cur.execute("SELECT * FROM events ORDER BY id DESC")
     rows = cur.fetchall()
     conn.close()
     return jsonify([dict(r) for r in rows])
 
-
-@app.route("/api/events", methods=["POST"])
-def create_event():
+@app.route("/api/admin/events", methods=["POST"])
+def admin_create_event():
     if not require_admin():
         return jsonify({"error": "Not logged in as admin"}), 401
-
+    
+    admin = current_admin()
     data = request.get_json(force=True)
     title = data.get("title", "").strip()
     if not title:
         return jsonify({"error": "title is required"}), 400
 
+    event_id = f"EVT-{int(time.time())}"
+    
     event_date_value = data.get("event_date", "").strip()
     if not event_date_value:
         event_date = datetime.now()
@@ -1148,22 +1235,165 @@ def create_event():
             try:
                 event_date = datetime.strptime(event_date_value, "%d %b %Y")
             except ValueError:
-                return jsonify({"error": "event_date must be a valid date"}), 400
+                event_date = datetime.now()
 
     conn = get_db()
     cur = conn.cursor()
     cur.execute(
-        "INSERT INTO events (title, description, event_date, created_at) VALUES (%s, %s, %s, %s)",
+        """
+        INSERT INTO events (event_id, title, description, event_date, start_time, end_time, venue, organizer, department, category, image_url, registration_url, max_participants, status, created_by, created_at)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """,
         (
+            event_id,
             title,
             data.get("description", ""),
             event_date,
-            datetime.now(),
-        ),
+            data.get("start_time", ""),
+            data.get("end_time", ""),
+            data.get("venue", ""),
+            data.get("organizer", ""),
+            data.get("department", ""),
+            data.get("category", ""),
+            data.get("image_url", ""),
+            data.get("registration_url", ""),
+            data.get("max_participants") or None,
+            data.get("status", "published"),
+            admin["id"],
+            datetime.now()
+        )
     )
     conn.commit()
     conn.close()
     return jsonify({"message": "Event added"}), 201
+
+@app.route("/api/admin/events/<int:id>", methods=["PUT"])
+def admin_update_event(id):
+    if not require_admin():
+        return jsonify({"error": "Not logged in as admin"}), 401
+    data = request.get_json(force=True)
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("UPDATE events SET title=%s, description=%s, status=%s, updated_at=%s WHERE id=%s", (
+        data.get("title", ""), data.get("description", ""), data.get("status", "published"), datetime.now(), id
+    ))
+    conn.commit()
+    conn.close()
+    return jsonify({"message": "Event updated"})
+
+@app.route("/api/admin/events/<int:id>", methods=["DELETE"])
+def admin_delete_event(id):
+    if not require_admin():
+        return jsonify({"error": "Not logged in as admin"}), 401
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM events WHERE id=%s", (id,))
+    conn.commit()
+    conn.close()
+    return jsonify({"message": "Event deleted"})
+
+@app.route("/api/admin/announcements", methods=["GET"])
+def admin_get_announcements():
+    if not require_admin():
+        return jsonify({"error": "Not logged in as admin"}), 401
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM announcements ORDER BY id DESC")
+    rows = cur.fetchall()
+    conn.close()
+    return jsonify([dict(r) for r in rows])
+
+@app.route("/api/admin/announcements", methods=["POST"])
+def admin_create_announcement():
+    if not require_admin():
+        return jsonify({"error": "Not logged in as admin"}), 401
+    admin = current_admin()
+    data = request.get_json(force=True)
+    title = data.get("title", "").strip()
+    if not title:
+        return jsonify({"error": "title is required"}), 400
+    
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("INSERT INTO announcements (title, content, status, created_by, created_at) VALUES (%s, %s, %s, %s, %s)", (
+        title, data.get("content", ""), data.get("status", "published"), admin["id"], datetime.now()
+    ))
+    conn.commit()
+    conn.close()
+    return jsonify({"message": "Announcement added"}), 201
+
+@app.route("/api/admin/announcements/<int:id>", methods=["PUT"])
+def admin_update_announcement(id):
+    if not require_admin():
+        return jsonify({"error": "Not logged in as admin"}), 401
+    data = request.get_json(force=True)
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("UPDATE announcements SET title=%s, content=%s, status=%s, updated_at=%s WHERE id=%s", (
+        data.get("title", ""), data.get("content", ""), data.get("status", "published"), datetime.now(), id
+    ))
+    conn.commit()
+    conn.close()
+    return jsonify({"message": "Announcement updated"})
+
+@app.route("/api/admin/announcements/<int:id>", methods=["DELETE"])
+def admin_delete_announcement(id):
+    if not require_admin():
+        return jsonify({"error": "Not logged in as admin"}), 401
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM announcements WHERE id=%s", (id,))
+    conn.commit()
+    conn.close()
+    return jsonify({"message": "Announcement deleted"})
+
+@app.route("/api/admin/users", methods=["GET"])
+def admin_get_users():
+    if not require_admin():
+        return jsonify({"error": "Not logged in as admin"}), 401
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT id, name, roll_number, college_email, role, is_active, is_verified, created_at FROM students ORDER BY id DESC")
+    rows = cur.fetchall()
+    conn.close()
+    return jsonify([dict(r) for r in rows])
+
+@app.route("/api/admin/users/<int:id>/status", methods=["POST"])
+def admin_update_user_status(id):
+    if not require_admin():
+        return jsonify({"error": "Not logged in as admin"}), 401
+    data = request.get_json(force=True)
+    is_active = data.get("is_active", True)
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("UPDATE students SET is_active=%s WHERE id=%s", (is_active, id))
+    conn.commit()
+    conn.close()
+    return jsonify({"message": "User status updated"})
+
+@app.route("/api/admin/dashboard/stats", methods=["GET"])
+def admin_dashboard_stats():
+    if not require_admin():
+        return jsonify({"error": "Not logged in as admin"}), 401
+    conn = get_db()
+    cur = conn.cursor()
+    stats = {}
+    cur.execute("SELECT COUNT(*) as count FROM students")
+    stats["total_students"] = cur.fetchone()["count"]
+    cur.execute("SELECT COUNT(*) as count FROM events WHERE status = 'published'")
+    stats["active_events"] = cur.fetchone()["count"]
+    cur.execute("SELECT COUNT(*) as count FROM complaints WHERE status = 'Open'")
+    stats["pending_complaints"] = cur.fetchone()["count"]
+    cur.execute("SELECT COUNT(*) as count FROM complaints WHERE status = 'In Progress'")
+    stats["in_progress_complaints"] = cur.fetchone()["count"]
+    cur.execute("SELECT COUNT(*) as count FROM complaints WHERE status = 'Resolved'")
+    stats["resolved_complaints"] = cur.fetchone()["count"]
+    cur.execute("SELECT COUNT(*) as count FROM lost_found WHERE status = 'Active'")
+    stats["active_lost_found"] = cur.fetchone()["count"]
+    cur.execute("SELECT COUNT(*) as count FROM announcements")
+    stats["total_announcements"] = cur.fetchone()["count"]
+    conn.close()
+    return jsonify(stats)
 
 
 init_db()  # validate the existing PostgreSQL tables and initialize the admin

@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Campus Copilot</title>
+<script src="{{ url_for('static', filename='theme.js') }}"></script>
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
@@ -20,22 +21,49 @@
     </div>
 
     <div class="login-card auth-card">
+      <div class="auth-tab-bar" aria-label="Authentication options">
+        <button class="auth-tab active" type="button" data-auth-view="login" aria-selected="true">Log In</button>
+        <button class="auth-tab" type="button" data-auth-view="register" aria-selected="false">Sign Up</button>
+      </div>
+
+      <div class="auth-access-toggle" aria-label="Authentication access type">
+        <button class="auth-access-option active" type="button" data-auth-access="student" aria-selected="true">Student Access</button>
+        <button class="auth-access-option" type="button" data-auth-access="admin" aria-selected="false">Admin Access</button>
+      </div>
+
     <div id="auth-login-view" class="auth-view">
-      <p class="eyebrow">STUDENT PORTAL</p>
-      <h1>User Login</h1>
-      <p class="tagline-dark">Sign in to your campus workspace.</p>
-      <form id="login-form" class="stack">
-        <label for="login-name">Name</label>
-        <input id="login-name" type="text" placeholder="Your full name" required>
-        <label for="login-password">Password</label>
-        <div class="password-input"><input id="login-password" type="password" placeholder="Enter your password" required><button type="button" class="password-toggle" data-target="login-password" aria-label="Show password">&#128065;</button></div>
-        <button type="submit" class="primary">Sign in</button>
-      </form>
-      <p id="login-error" class="error-text hidden"></p>
-      <p class="auth-switch"><a href="#" id="show-reset-link">Forgot password?</a></p>
-      <p class="auth-switch">Not a student? <a href="/admin/login">Admin Login</a></p>
-      <p class="auth-switch">New here? <a href="#" id="show-register-link">Sign up</a></p>
-      <p class="auth-switch support-mobile"><a href="mailto:support@college.edu">Need help? Contact support</a></p>
+      <div class="auth-access-panel active" data-auth-access-panel="student">
+        <p class="eyebrow">STUDENT ACCESS</p>
+        <h1>Welcome back, Student</h1>
+        <p class="tagline-dark">Sign in to access your dashboard.</p>
+        <form id="login-form" class="stack">
+          <label for="login-name">Email or Roll Number</label>
+          <input id="login-name" type="text" placeholder="Your email or roll number" required>
+          <label for="login-password">Password</label>
+          <div class="password-input"><input id="login-password" type="password" placeholder="Enter your password" required><button type="button" class="password-toggle" data-target="login-password" aria-label="Show password">&#128065;</button></div>
+          <button type="submit" class="primary">Sign In</button>
+        </form>
+        <p id="login-error" class="error-text hidden"></p>
+        <p class="auth-switch"><a href="#" id="show-reset-link">Forgot password?</a></p>
+        <p class="auth-switch"><a href="#" id="show-admin-access-link">Are you an admin? Admin Login</a></p>
+        <p class="auth-switch">New here? <a href="#" id="show-register-link">Sign up</a></p>
+        <p class="auth-switch support-mobile"><a href="mailto:support@college.edu">Need help? Contact support</a></p>
+      </div>
+
+      <div class="auth-access-panel hidden" data-auth-access-panel="admin">
+        <p class="eyebrow">ADMIN ACCESS</p>
+        <h1>Welcome back, Admin</h1>
+        <p class="tagline-dark">Sign in to manage your campus.</p>
+        <form id="admin-inline-login-form" class="stack">
+          <label for="admin-inline-email">Admin email</label>
+          <input id="admin-inline-email" type="email" placeholder="admin@college.edu" required>
+          <label for="admin-inline-password">Password</label>
+          <div class="password-input"><input id="admin-inline-password" type="password" placeholder="Enter your password" required><button type="button" class="password-toggle" data-target="admin-inline-password" aria-label="Show password">&#128065;</button></div>
+          <button type="submit" class="primary">Sign In</button>
+        </form>
+        <p id="admin-inline-login-error" class="error-text hidden"></p>
+        <p class="auth-switch"><a href="#" id="show-student-access-link">Are you a student? Student Login</a></p>
+      </div>
     </div>
 
     <div id="auth-register-view" class="auth-view hidden">
@@ -115,107 +143,416 @@
 </section>
 
 <div id="app-shell" class="hidden">
+  <div class="dashboard-shell">
+    <aside class="sidebar">
+      <div class="brand-block">
+        <div class="brand-mark">CC</div>
+        <div class="brand-text">
+          <span class="brand-name">CampusCopilot</span>
+          <span class="brand-subtitle">Student portal</span>
+        </div>
+      </div>
 
-<header class="topbar">
-  <div class="logo">Campus Copilot</div>
-  <div class="tagline">One Campus. One Assistant. One Platform.</div>
-  <div class="topbar-user">
-    <span id="current-user-label"></span>
-    <button id="switch-user-btn" class="ghost">Switch User</button>
-    <a href="/admin" class="ghost-link">Admin</a>
+      <nav class="sidebar-nav" aria-label="Main navigation">
+        <button class="nav-item active" type="button" data-target="dashboard">
+          <span class="nav-icon" aria-hidden="true">⌂</span>
+          <span>Dashboard</span>
+        </button>
+        <button class="nav-item" type="button" data-target="assistant">
+          <span class="nav-icon" aria-hidden="true">✦</span>
+          <span>AI Assistant</span>
+        </button>
+        <button class="nav-item" type="button" data-target="lostfound">
+          <span class="nav-icon" aria-hidden="true">⌕</span>
+          <span>Lost &amp; Found</span>
+        </button>
+        <button class="nav-item" type="button" data-target="complaints">
+          <span class="nav-icon" aria-hidden="true">☰</span>
+          <span>Complaints</span>
+        </button>
+        <button class="nav-item" type="button" data-target="map">
+          <span class="nav-icon" aria-hidden="true">▣</span>
+          <span>Campus Map</span>
+        </button>
+        <button class="nav-item" type="button" data-target="notifications">
+          <span class="nav-icon" aria-hidden="true">◌</span>
+          <span>Notifications</span>
+        </button>
+        <button class="nav-item" type="button" data-target="profile">
+          <span class="nav-icon" aria-hidden="true">◍</span>
+          <span>Profile</span>
+        </button>
+        <button class="nav-item" type="button" data-target="settings">
+          <span class="nav-icon" aria-hidden="true">⚙</span>
+          <span>Settings</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <button class="nav-item nav-item-logout" type="button" data-action="logout">
+          <span class="nav-icon" aria-hidden="true">↩</span>
+          <span>Logout</span>
+        </button>
+      </div>
+    </aside>
+
+    <div class="main-panel">
+      <header class="dashboard-header">
+        <div class="header-copy">
+          <p class="eyebrow-small">Student workspace</p>
+          <h1 id="hello-heading">Good Morning, Student 👋</h1>
+          <p class="header-subtitle">Here's what's happening around your campus today.</p>
+        </div>
+
+        <div class="header-actions">
+          <button class="ghost-button icon-button" type="button" aria-label="Search">
+            <span aria-hidden="true">⌕</span>
+          </button>
+          <button class="ghost-button icon-button" type="button" aria-label="Notifications">
+            <span aria-hidden="true">🔔</span>
+            <span class="notification-dot" aria-hidden="true"></span>
+          </button>
+          <div class="profile-pill" aria-label="Current student details">
+            <div class="profile-avatar" aria-hidden="true">S</div>
+            <span id="current-user-label">Student</span>
+          </div>
+          <button id="switch-user-btn" class="ghost-button" type="button">Switch User</button>
+        </div>
+      </header>
+
+      <main class="dashboard-content">
+        <div class="content-column">
+          <section id="tab-dashboard" class="panel-section active">
+            <div class="card welcome-card">
+              <div class="welcome-copy">
+                <p class="section-kicker">Welcome</p>
+                <h2>Welcome to CampusCopilot</h2>
+                <p>Your intelligent campus companion.</p>
+                <div class="quick-action-row">
+                  <button class="quick-action" type="button" data-target="assistant">
+                    <span aria-hidden="true">✦</span>
+                    Ask AI
+                  </button>
+                  <button class="quick-action" type="button" data-target="complaints">
+                    <span aria-hidden="true">⚑</span>
+                    Report Complaint
+                  </button>
+                  <button class="quick-action" type="button" data-target="lostfound">
+                    <span aria-hidden="true">⌕</span>
+                    Lost &amp; Found
+                  </button>
+                  <button class="quick-action" type="button" data-target="map">
+                    <span aria-hidden="true">▣</span>
+                    Open Campus Map
+                  </button>
+                </div>
+              </div>
+
+              <div class="welcome-visual" aria-hidden="true">
+                <div class="visual-bubble bubble-one"></div>
+                <div class="visual-bubble bubble-two"></div>
+                <div class="visual-graph">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </div>
+              </div>
+            </div>
+
+            <div class="stats-grid">
+              <article class="card stat-card">
+                <div class="stat-header">
+                  <div>
+                    <p class="section-kicker">My Complaints</p>
+                    <h3 id="stat-complaints-count">0</h3>
+                  </div>
+                  <span class="stat-icon neutral">☰</span>
+                </div>
+                <p class="stat-caption">Submitted this term</p>
+                <span class="status-pill status-open">Live</span>
+              </article>
+
+              <article class="card stat-card">
+                <div class="stat-header">
+                  <div>
+                    <p class="section-kicker">Lost &amp; Found</p>
+                    <h3 id="stat-lostfound-count">0</h3>
+                  </div>
+                  <span class="stat-icon primary">⌕</span>
+                </div>
+                <p class="stat-caption">Active cases</p>
+                <span class="status-pill status-info">Active</span>
+              </article>
+
+              <article class="card stat-card">
+                <div class="stat-header">
+                  <div>
+                    <p class="section-kicker">Notifications</p>
+                    <h3 id="stat-notifications-count">0</h3>
+                  </div>
+                  <span class="stat-icon warning">◌</span>
+                </div>
+                <p class="stat-caption">Unread updates</p>
+                <span class="status-pill status-warn">New</span>
+              </article>
+
+              <article class="card stat-card">
+                <div class="stat-header">
+                  <div>
+                    <p class="section-kicker">AI Queries</p>
+                    <h3 id="stat-ai-queries-count">0</h3>
+                  </div>
+                  <span class="stat-icon success">✦</span>
+                </div>
+                <p class="stat-caption">Questions asked</p>
+                <span class="status-pill status-success">Ready</span>
+              </article>
+            </div>
+          </section>
+
+          <section id="tab-assistant" class="panel-section">
+            <div class="card panel-card">
+              <div class="section-header">
+                <div>
+                  <p class="section-kicker">AI assistant</p>
+                  <h2>Campus AI Assistant</h2>
+                </div>
+                <button class="pill-button" type="button" data-target="assistant">Start Chat</button>
+              </div>
+
+              <div class="assistant-shell">
+                <div id="chat-log" class="chat-log" aria-live="polite"></div>
+                <form id="assistant-form" class="assistant-form">
+                  <label class="sr-only" for="assistant-input">Ask Campus Copilot</label>
+                  <input id="assistant-input" type="text" placeholder="Ask anything about your campus…" required>
+                  <button type="submit">Ask</button>
+                </form>
+
+                <div id="suggestion-box" class="suggestion hidden" aria-live="polite">
+                  <p><strong>Intent:</strong> <span id="sugg-intent"></span></p>
+                  <p><strong>Category:</strong> <span id="sugg-category"></span></p>
+                  <p><strong>Priority:</strong> <span id="sugg-priority"></span></p>
+                  <p><strong>Suggested department:</strong> <span id="sugg-department"></span></p>
+                  <p><strong>Next action:</strong> <span id="sugg-action"></span></p>
+                  <button id="submit-complaint-btn" class="primary" type="button">Submit as Complaint</button>
+                </div>
+
+                <div class="example-questions">
+                  <button type="button" class="example-question" data-example="Where is the library?">Where is the library?</button>
+                  <button type="button" class="example-question" data-example="How do I submit a complaint?">How do I submit a complaint?</button>
+                  <button type="button" class="example-question" data-example="What events are happening today?">What events are happening today?</button>
+                  <button type="button" class="example-question" data-example="Where can I find the lost & found office?">Where can I find the lost &amp; found office?</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section id="tab-complaints" class="panel-section">
+            <div class="card panel-card">
+              <div class="section-header">
+                <div>
+                  <p class="section-kicker">Student service</p>
+                  <h2>My Complaints</h2>
+                </div>
+                <button class="pill-button" type="button">View All Complaints</button>
+              </div>
+              <div id="complaints-list" class="stack-list"></div>
+            </div>
+          </section>
+
+          <section id="tab-lostfound" class="panel-section">
+            <div class="card panel-card">
+              <div class="section-header">
+                <div>
+                  <p class="section-kicker">Campus support</p>
+                  <h2>Lost &amp; Found</h2>
+                </div>
+                <div class="inline-actions">
+                  <button class="pill-button" type="button">View Lost &amp; Found</button>
+                  <button class="primary-button" type="button">Report Lost Item</button>
+                </div>
+              </div>
+
+              <form id="lostfound-form" class="lostfound-form">
+                <div class="field-grid">
+                  <label>
+                    <span>Type</span>
+                    <select id="lf-type">
+                      <option value="Lost">Lost</option>
+                      <option value="Found">Found</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Item name</span>
+                    <input id="lf-name" type="text" placeholder="Blue water bottle" required>
+                  </label>
+                </div>
+                <div class="field-grid">
+                  <label>
+                    <span>Location</span>
+                    <input id="lf-location" type="text" placeholder="Library entrance">
+                  </label>
+                  <label>
+                    <span>Contact</span>
+                    <input id="lf-contact" type="text" placeholder="Your phone or name">
+                  </label>
+                </div>
+                <button type="submit" class="primary-button">Report Item</button>
+              </form>
+
+              <div id="lostfound-list" class="stack-list"></div>
+            </div>
+          </section>
+
+          <section id="tab-map" class="panel-section">
+            <div class="card panel-card">
+              <div class="section-header">
+                <div>
+                  <p class="section-kicker">Campus navigation</p>
+                  <h2>Explore Campus</h2>
+                </div>
+                <button class="pill-button" type="button">Open Full Map</button>
+              </div>
+
+              <div class="map-toolbar">
+                <button id="map-locate-btn" class="primary-button" type="button">Where Am I?</button>
+                <select id="map-to" aria-label="Choose destination">
+                  <option value="">Guide me to...</option>
+                </select>
+                <button id="map-show-path" class="secondary-button" type="button">Go</button>
+                <button id="map-clear-path" class="ghost-button" type="button">Clear</button>
+              </div>
+
+              <p id="map-locate-status" class="map-hint hidden"></p>
+
+              <div id="map-container" class="map-container">
+                <img id="campus-map-img" src="{{ url_for('static', filename='campus_map.jpg') }}" alt="Campus map preview">
+                <svg id="map-svg" class="map-svg" aria-label="Campus walking route"></svg>
+                <div id="map-pins"></div>
+              </div>
+
+              <div id="map-info-box" class="map-info-box hidden"></div>
+            </div>
+          </section>
+
+          <section id="tab-notifications" class="panel-section">
+            <div class="card panel-card">
+              <div class="section-header">
+                <div>
+                  <p class="section-kicker">Updates</p>
+                  <h2>Notifications</h2>
+                </div>
+              </div>
+              <div id="notification-list" class="timeline-list"></div>
+            </div>
+          </section>
+
+          <section id="tab-profile" class="panel-section">
+            <div class="card panel-card">
+              <div class="section-header">
+                <div>
+                  <p class="section-kicker">Account</p>
+                  <h2>Student Profile</h2>
+                </div>
+              </div>
+
+              <div class="profile-grid">
+                <div class="profile-summary card-soft">
+                  <div class="profile-avatar large" id="profile-avatar" aria-hidden="true">S</div>
+                  <div>
+                    <h3 id="profile-name">Student</h3>
+                    <p id="profile-roll">—</p>
+                  </div>
+                </div>
+                <div class="profile-meta card-soft">
+                  <div><span>College Email</span><strong id="profile-email">—</strong></div>
+                  <div><span>Program</span><strong>Computer Science</strong></div>
+                  <div><span>Campus Status</span><strong>Active</strong></div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section id="tab-settings" class="panel-section">
+            <div class="card panel-card">
+              <div class="section-header">
+                <div>
+                  <p class="section-kicker">Preferences</p>
+                  <h2>Settings</h2>
+                </div>
+              </div>
+
+              <div class="settings-list">
+                <div class="setting-row">
+                  <div>
+                    <strong>Push notifications</strong>
+                    <p>Receive campus updates and alerts.</p>
+                  </div>
+                  <label class="toggle"><input type="checkbox" checked><span></span></label>
+                </div>
+                <div class="setting-row">
+                  <div>
+                    <strong>AI suggestions</strong>
+                    <p>Get smarter guidance from Campus Copilot.</p>
+                  </div>
+                  <label class="toggle"><input type="checkbox" checked><span></span></label>
+                </div>
+                <div class="setting-row">
+                  <div>
+                    <strong>Location access</strong>
+                    <p>Use map navigation and location services.</p>
+                  </div>
+                  <label class="toggle"><input type="checkbox" checked><span></span></label>
+                </div>
+                <div class="setting-row">
+                  <div>
+                    <strong>Theme preference</strong>
+                    <p>Switch between light and dark appearance.</p>
+                  </div>
+                  <div class="theme-mode-control" title="Switch between Light Mode and Dark Mode">
+                    <span class="theme-mode-icon" aria-hidden="true">☀️</span>
+                    <label class="toggle" title="Switch to Dark Mode">
+                      <input id="theme-toggle" type="checkbox" role="switch" aria-label="Switch to Dark Mode">
+                      <span></span>
+                    </label>
+                    <span class="theme-mode-icon" aria-hidden="true">🌙</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <aside class="side-column">
+          <div class="card compact-card">
+            <p class="section-kicker">Notifications</p>
+            <h3>Today’s updates</h3>
+            <ul id="sidebar-notifications" class="mini-list"></ul>
+          </div>
+
+          <div class="card compact-card">
+            <p class="section-kicker">Campus announcements</p>
+            <h3>Important updates</h3>
+            <div id="sidebar-events" class="announcement-list"></div>
+          </div>
+
+          <div class="card compact-card">
+            <p class="section-kicker">Quick campus info</p>
+            <h3>Need to know</h3>
+            <div class="info-chips">
+              <span class="info-chip">Library • Open</span>
+              <span class="info-chip">Cafeteria • Open</span>
+              <span class="info-chip">Admin Block • 9AM-5PM</span>
+              <span class="info-chip">Hostel • Wi-Fi</span>
+            </div>
+          </div>
+        </aside>
+      </main>
+    </div>
   </div>
-</header>
 
-<main class="layout">
-
-  <!-- LEFT: nav / menu card -->
-  <section class="card">
-    <h2 id="hello-heading">Hello, Student 👋</h2>
-    <nav class="menu">
-      <button class="menu-item active" data-tab="assistant">💬 Ask Campus Copilot</button>
-      <button class="menu-item" data-tab="complaints">📋 My Complaints</button>
-      <button class="menu-item" data-tab="lostfound">🔎 Lost & Found</button>
-      <button class="menu-item" data-tab="events">📢 Events & Announcements</button>
-      <button class="menu-item" data-tab="map">🗺️ Campus Map</button>
-    </nav>
-  </section>
-
-  <!-- RIGHT: active panel -->
-  <section class="card panel">
-
-    <!-- Assistant tab -->
-    <div id="tab-assistant" class="tab-content active">
-      <h3>Campus Copilot</h3>
-      <div id="chat-log" class="chat-log"></div>
-      <form id="assistant-form" class="row">
-        <input id="assistant-input" type="text" placeholder="e.g. The projector in Room 204 is not working" required>
-        <button type="submit">Ask</button>
-      </form>
-
-      <div id="suggestion-box" class="suggestion hidden">
-        <p><strong>Intent:</strong> <span id="sugg-intent"></span></p>
-        <p><strong>Category:</strong> <span id="sugg-category"></span></p>
-        <p><strong>Priority:</strong> <span id="sugg-priority"></span></p>
-        <p><strong>Suggested department:</strong> <span id="sugg-department"></span></p>
-        <p><strong>Next action:</strong> <span id="sugg-action"></span></p>
-        <button id="submit-complaint-btn" class="primary">Submit as Complaint</button>
-      </div>
-    </div>
-
-    <!-- Complaints tab -->
-    <div id="tab-complaints" class="tab-content">
-      <h3>My Complaints</h3>
-      <div id="complaints-list" class="list"></div>
-    </div>
-
-    <!-- Lost & Found tab -->
-    <div id="tab-lostfound" class="tab-content">
-      <h3>Lost & Found</h3>
-      <form id="lostfound-form" class="stack">
-        <select id="lf-type">
-          <option value="Lost">I lost something</option>
-          <option value="Found">I found something</option>
-        </select>
-        <input id="lf-name" type="text" placeholder="Item name (e.g. Blue water bottle)" required>
-        <input id="lf-location" type="text" placeholder="Location">
-        <input id="lf-contact" type="text" placeholder="Your contact info">
-        <button type="submit" class="primary">Report Item</button>
-      </form>
-      <div id="lostfound-list" class="list"></div>
-    </div>
-
-    <!-- Events tab -->
-    <div id="tab-events" class="tab-content">
-      <h3>Events & Announcements</h3>
-      <div id="events-list" class="list"></div>
-    </div>
-
-    <!-- Campus Map tab -->
-    <div id="tab-map" class="tab-content">
-      <h3>Campus Map</h3>
-      <p class="map-hint">Tap "Where Am I?" to find your live location, then pick where you want to go.</p>
-
-      <div class="map-controls">
-        <button id="map-locate-btn" class="primary">📍 Where Am I?</button>
-        <select id="map-to"><option value="">Guide me to...</option></select>
-        <button id="map-show-path" class="ghost-dark">Go</button>
-        <button id="map-clear-path" class="ghost-dark">Clear</button>
-      </div>
-      <p id="map-locate-status" class="map-hint hidden"></p>
-
-      <div id="map-container" class="map-container">
-        <img id="campus-map-img" src="{{ url_for('static', filename='campus_map.jpg') }}" alt="Campus Map">
-        <svg id="map-svg" class="map-svg"></svg>
-        <div id="map-pins"></div>
-      </div>
-
-      <div id="map-info-box" class="map-info-box hidden"></div>
-    </div>
-
-  </section>
-</main>
-
-<script src="{{ url_for('static', filename='script.js') }}"></script>
+  <script src="{{ url_for('static', filename='script.js') }}"></script>
 </div>
 </body>
 </html>

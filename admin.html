@@ -4,51 +4,342 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Campus Copilot - Admin</title>
+<script src="{{ url_for('static', filename='theme.js') }}"></script>
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
 
-<header class="topbar">
-  <div class="logo">Campus Copilot — Admin</div>
-  <div class="tagline">Manage complaints & post announcements</div>
-  <div class="topbar-user">
-    <a href="/student/login" class="ghost-link">Student view</a>
-    <a href="/admin/login-history" class="ghost-link">Login history</a>
-    <button id="admin-logout-btn" class="ghost">Log Out</button>
+<div id="app-shell">
+  <div class="dashboard-shell">
+    <aside class="sidebar">
+      <div class="brand-block">
+        <div class="brand-mark">CC</div>
+        <div class="brand-text">
+          <span class="brand-name">CampusCopilot</span>
+          <span class="brand-subtitle">Admin workspace</span>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav" aria-label="Main navigation">
+        <button class="nav-item active" type="button" data-target="dashboard">
+          <span class="nav-icon" aria-hidden="true">⌂</span>
+          <span>Dashboard</span>
+        </button>
+        <button class="nav-item" type="button" data-target="users">
+          <span class="nav-icon" aria-hidden="true">👤</span>
+          <span>Users</span>
+        </button>
+        <button class="nav-item" type="button" data-target="events">
+          <span class="nav-icon" aria-hidden="true">📅</span>
+          <span>Events</span>
+        </button>
+        <button class="nav-item" type="button" data-target="complaints">
+          <span class="nav-icon" aria-hidden="true">☰</span>
+          <span>Complaints</span>
+        </button>
+        <button class="nav-item" type="button" data-target="lostfound">
+          <span class="nav-icon" aria-hidden="true">⌕</span>
+          <span>Lost &amp; Found</span>
+        </button>
+        <button class="nav-item" type="button" data-target="announcements">
+          <span class="nav-icon" aria-hidden="true">📢</span>
+          <span>Announcements</span>
+        </button>
+        <a class="nav-item" href="/admin/login-history" style="text-decoration: none; color: inherit;">
+          <span class="nav-icon" aria-hidden="true">🕒</span>
+          <span>Login History</span>
+        </a>
+        <button class="nav-item" type="button" data-target="profile">
+          <span class="nav-icon" aria-hidden="true">◍</span>
+          <span>Profile</span>
+        </button>
+        <button class="nav-item" type="button" data-target="settings">
+          <span class="nav-icon" aria-hidden="true">⚙</span>
+          <span>Settings</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <button class="nav-item nav-item-logout" type="button" data-action="logout">
+          <span class="nav-icon" aria-hidden="true">↩</span>
+          <span>Logout</span>
+        </button>
+      </div>
+    </aside>
+
+    <div class="main-panel">
+      <header class="dashboard-header">
+        <div class="header-copy">
+          <p class="eyebrow-small">ADMIN WORKSPACE</p>
+          <h1 id="hello-heading">Good Morning, Admin 👋</h1>
+          <p class="header-subtitle">Here's what's happening across your campus today.</p>
+        </div>
+
+        <div class="header-actions">
+          <button class="ghost-button icon-button" type="button" aria-label="Search">
+            <span aria-hidden="true">⌕</span>
+          </button>
+          <button class="ghost-button icon-button" type="button" aria-label="Notifications">
+            <span aria-hidden="true">🔔</span>
+            <span class="notification-dot" aria-hidden="true"></span>
+          </button>
+          <div class="profile-pill" aria-label="Current admin details">
+            <div class="profile-avatar" aria-hidden="true">A</div>
+            <span id="current-user-label">Admin</span>
+          </div>
+          <button id="switch-user-btn" class="ghost-button" type="button">Student View</button>
+        </div>
+      </header>
+
+      <main class="dashboard-content">
+        <div class="content-column" style="width: 100%; max-width: 1200px;">
+          <!-- DASHBOARD TAB -->
+          <section id="tab-dashboard" class="panel-section active">
+            <div class="stats-grid">
+              <article class="card stat-card">
+                <div class="stat-header">
+                  <div>
+                    <p class="section-kicker">Students</p>
+                    <h3 id="stat-students-count">...</h3>
+                  </div>
+                  <span class="stat-icon primary">👤</span>
+                </div>
+                <p class="stat-caption">Total registered</p>
+              </article>
+
+              <article class="card stat-card">
+                <div class="stat-header">
+                  <div>
+                    <p class="section-kicker">Events</p>
+                    <h3 id="stat-events-count">...</h3>
+                  </div>
+                  <span class="stat-icon success">📅</span>
+                </div>
+                <p class="stat-caption">Active events</p>
+              </article>
+
+              <article class="card stat-card">
+                <div class="stat-header">
+                  <div>
+                    <p class="section-kicker">Complaints</p>
+                    <h3 id="stat-complaints-count">...</h3>
+                  </div>
+                  <span class="stat-icon warning">☰</span>
+                </div>
+                <p class="stat-caption">Pending</p>
+              </article>
+
+              <article class="card stat-card">
+                <div class="stat-header">
+                  <div>
+                    <p class="section-kicker">Lost &amp; Found</p>
+                    <h3 id="stat-lostfound-count">...</h3>
+                  </div>
+                  <span class="stat-icon info">⌕</span>
+                </div>
+                <p class="stat-caption">Active cases</p>
+              </article>
+            </div>
+            
+            <div class="stats-grid" style="margin-top: 24px;">
+                <article class="card stat-card">
+                <div class="stat-header">
+                  <div>
+                    <p class="section-kicker">Announcements</p>
+                    <h3 id="stat-announcements-count">...</h3>
+                  </div>
+                  <span class="stat-icon neutral">📢</span>
+                </div>
+                <p class="stat-caption">Total published</p>
+              </article>
+            </div>
+          </section>
+
+          <!-- USERS TAB -->
+          <section id="tab-users" class="panel-section">
+            <div class="card panel-card">
+              <div class="section-header">
+                <div>
+                  <p class="section-kicker">User management</p>
+                  <h2>Students</h2>
+                </div>
+                <button class="pill-button" type="button" id="refresh-users-btn">Refresh</button>
+              </div>
+              <div class="table-wrap">
+                  <table>
+                      <thead><tr><th>ID</th><th>Name</th><th>Roll Number</th><th>Email</th><th>Status</th><th>Actions</th></tr></thead>
+                      <tbody id="admin-users-list"></tbody>
+                  </table>
+              </div>
+            </div>
+          </section>
+
+          <!-- EVENTS TAB -->
+          <section id="tab-events" class="panel-section">
+            <div class="card panel-card">
+              <div class="section-header">
+                <div>
+                  <p class="section-kicker">Campus events</p>
+                  <h2>Event Management</h2>
+                </div>
+                <button class="primary-button" type="button" id="open-event-modal-btn">Create Event</button>
+              </div>
+              
+              <!-- Create Event Form (Hidden by default) -->
+              <form id="event-form" class="lostfound-form hidden" style="margin-bottom: 24px; border: 1px solid var(--border); padding: 20px; border-radius: var(--radius-md);">
+                <h3>Post New Event</h3>
+                <div class="field-grid">
+                  <label>
+                    <span>Title</span>
+                    <input id="event-title" type="text" placeholder="Tech Symposium" required>
+                  </label>
+                  <label>
+                    <span>Event Date</span>
+                    <input id="event-date" type="date" required>
+                  </label>
+                </div>
+                <div class="field-grid">
+                  <label>
+                    <span>Description</span>
+                    <input id="event-description" type="text" placeholder="Event description...">
+                  </label>
+                  <label>
+                    <span>Venue</span>
+                    <input id="event-venue" type="text" placeholder="Main Auditorium">
+                  </label>
+                </div>
+                <div class="inline-actions" style="margin-top: 16px;">
+                  <button type="submit" class="primary-button">Save Event</button>
+                  <button type="button" class="ghost-button" id="cancel-event-btn">Cancel</button>
+                </div>
+              </form>
+
+              <div id="admin-events-list" class="stack-list"></div>
+            </div>
+          </section>
+
+          <!-- COMPLAINTS TAB -->
+          <section id="tab-complaints" class="panel-section">
+            <div class="card panel-card">
+              <div class="section-header">
+                <div>
+                  <p class="section-kicker">Student service</p>
+                  <h2>Complaints Management</h2>
+                </div>
+                <button class="pill-button" type="button" id="refresh-complaints-btn">Refresh</button>
+              </div>
+              <div id="admin-complaints-list" class="stack-list"></div>
+            </div>
+          </section>
+
+          <!-- LOST & FOUND TAB -->
+          <section id="tab-lostfound" class="panel-section">
+            <div class="card panel-card">
+              <div class="section-header">
+                <div>
+                  <p class="section-kicker">Campus support</p>
+                  <h2>Lost &amp; Found Management</h2>
+                </div>
+                <button class="pill-button" type="button" id="refresh-lf-btn">Refresh</button>
+              </div>
+              <div id="admin-lostfound-list" class="stack-list"></div>
+            </div>
+          </section>
+
+          <!-- ANNOUNCEMENTS TAB -->
+          <section id="tab-announcements" class="panel-section">
+            <div class="card panel-card">
+              <div class="section-header">
+                <div>
+                  <p class="section-kicker">Updates</p>
+                  <h2>Campus Announcements</h2>
+                </div>
+                <button class="primary-button" type="button" id="open-announcement-modal-btn">Post Announcement</button>
+              </div>
+              
+              <form id="announcement-form" class="lostfound-form hidden" style="margin-bottom: 24px; border: 1px solid var(--border); padding: 20px; border-radius: var(--radius-md);">
+                <h3>Post Announcement</h3>
+                <div class="stack">
+                  <label>
+                    <span>Title</span>
+                    <input id="announcement-title" type="text" placeholder="Library timing updated" required>
+                  </label>
+                  <label>
+                    <span>Content</span>
+                    <input id="announcement-content" type="text" placeholder="Announcement content..." required>
+                  </label>
+                </div>
+                <div class="inline-actions" style="margin-top: 16px;">
+                  <button type="submit" class="primary-button">Publish</button>
+                  <button type="button" class="ghost-button" id="cancel-announcement-btn">Cancel</button>
+                </div>
+              </form>
+
+              <div id="admin-announcements-list" class="stack-list"></div>
+            </div>
+          </section>
+
+          <!-- PROFILE TAB -->
+          <section id="tab-profile" class="panel-section">
+            <div class="card panel-card">
+              <div class="section-header">
+                <div>
+                  <p class="section-kicker">Account</p>
+                  <h2>Admin Profile</h2>
+                </div>
+              </div>
+
+              <div class="profile-grid">
+                <div class="profile-summary card-soft">
+                  <div class="profile-avatar large" id="profile-avatar" aria-hidden="true">A</div>
+                  <div>
+                    <h3 id="profile-name">Campus Admin</h3>
+                    <p id="profile-admin-id">ADMIN-001</p>
+                  </div>
+                </div>
+                <div class="profile-meta card-soft">
+                  <div><span>Email</span><strong id="profile-email">...</strong></div>
+                  <div><span>Role</span><strong id="profile-role">...</strong></div>
+                  <div><span>Status</span><strong id="profile-status">...</strong></div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- SETTINGS TAB -->
+          <section id="tab-settings" class="panel-section">
+            <div class="card panel-card">
+              <div class="section-header">
+                <div>
+                  <p class="section-kicker">Preferences</p>
+                  <h2>Settings</h2>
+                </div>
+              </div>
+
+              <div class="settings-list">
+                <div class="setting-row">
+                  <div>
+                    <strong>Theme preference</strong>
+                    <p>Switch between light and dark appearance.</p>
+                  </div>
+                  <div class="theme-mode-control" title="Switch between Light Mode and Dark Mode">
+                    <span class="theme-mode-icon" aria-hidden="true">☀️</span>
+                    <label class="toggle" title="Switch to Dark Mode">
+                      <input id="theme-toggle" type="checkbox" role="switch" aria-label="Switch to Dark Mode">
+                      <span></span>
+                    </label>
+                    <span class="theme-mode-icon" aria-hidden="true">🌙</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </main>
+    </div>
   </div>
-</header>
 
-<main class="admin-layout">
-
-  <section class="card">
-    <div class="card-header-row">
-      <h3>All Complaints</h3>
-      <button id="refresh-btn" class="ghost-dark">Refresh</button>
-    </div>
-    <div id="admin-complaints-list" class="list"></div>
-  </section>
-
-  <section class="card">
-    <div class="card-header-row">
-      <h3>Lost & Found</h3>
-      <button id="refresh-lf-btn" class="ghost-dark">Refresh</button>
-    </div>
-    <div id="admin-lostfound-list" class="list"></div>
-  </section>
-
-  <section class="card">
-    <h3>Post an Event / Announcement</h3>
-    <form id="event-form" class="stack">
-      <input id="event-title" type="text" placeholder="Title" required>
-      <input id="event-description" type="text" placeholder="Description">
-      <input id="event-date" type="text" placeholder="Date (e.g. 20 Aug 2026)">
-      <button type="submit" class="primary">Post Event</button>
-    </form>
-    <div id="admin-events-list" class="list"></div>
-  </section>
-
-</main>
-
-<script src="{{ url_for('static', filename='admin.js') }}"></script>
+  <script src="{{ url_for('static', filename='admin.js') }}"></script>
+</div>
 </body>
 </html>
