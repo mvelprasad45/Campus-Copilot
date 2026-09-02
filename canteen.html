@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart Canteen – Campus Copilot</title>
+  <script src="{{ url_for('static', filename='theme.js') }}"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='canteen.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='canteen_sidebar.css') }}" />
+</head>
+<body>
+  <div class="dashboard-shell canteen-shell">
+    <aside class="sidebar">
+      <div class="brand-block">
+        <div class="brand-mark">CC</div>
+        <div class="brand-text">
+          <span class="brand-name">CampusCopilot</span>
+          <span class="brand-subtitle">Smart Canteen</span>
+        </div>
+      </div>
+      <nav class="sidebar-nav" aria-label="Canteen navigation">
+        <button class="nav-item active" type="button" id="nav-food-ordering">
+          <span class="nav-icon" aria-hidden="true">🍔</span>
+          <span>Food Ordering</span>
+        </button>
+        <button class="nav-item" type="button" id="nav-dashboard">
+          <span class="nav-icon" aria-hidden="true">⌂</span>
+          <span>Dashboard</span>
+        </button>
+        <button class="nav-item" type="button" id="nav-orders-btn">
+          <span class="nav-icon" aria-hidden="true">📦</span>
+          <span>My Orders</span>
+        </button>
+      </nav>
+      <div class="sidebar-footer">
+        <button class="nav-item nav-item-logout" type="button" id="canteen-logout-btn">
+          <span class="nav-icon" aria-hidden="true">↩</span>
+          <span>Logout</span>
+        </button>
+      </div>
+    </aside>
+
+    <div class="main-panel">
+      <header class="dashboard-header">
+        <div class="header-copy">
+          <p class="eyebrow-small">Student workspace</p>
+          <h1>Smart Canteen</h1>
+          <p class="header-subtitle">Order ahead, pay securely, and collect with a pickup token.</p>
+        </div>
+        <div class="header-actions">
+          <div class="profile-pill">
+            <div class="profile-avatar" id="canteen-avatar">S</div>
+            <span id="canteen-user-label">Student</span>
+          </div>
+        </div>
+      </header>
+
+      <main class="canteen-main">
+        <section id="view-canteens" class="canteen-view active">
+          <div class="canteen-page-head">
+            <h2>Select a Canteen</h2>
+            <p class="muted-text">Choose an open canteen to browse the menu.</p>
+          </div>
+          <div id="canteen-grid" class="canteen-grid"></div>
+        </section>
+
+        <section id="view-menu" class="canteen-view">
+          <div class="canteen-page-head menu-page-head">
+            <button id="back-to-canteens" class="back-btn" type="button">← Back</button>
+            <div class="menu-head-row">
+              <div class="menu-canteen-meta">
+                <h2 id="menu-canteen-name"></h2>
+                <p id="menu-canteen-location" class="muted-text"></p>
+                <span id="menu-canteen-badge" class="status-pill"></span>
+              </div>
+              <button id="view-cart-btn" class="cart-btn" type="button">
+                🛒 Cart <span class="cart-badge" id="cart-count-badge">0</span>
+              </button>
+            </div>
+          </div>
+          <div class="menu-controls">
+            <input type="search" id="menu-search" class="menu-search" placeholder="🔍 Search food..." autocomplete="off" />
+            <div id="category-filter" class="category-filter"></div>
+          </div>
+          <div id="menu-grid" class="menu-grid"></div>
+        </section>
+
+        <section id="view-cart" class="canteen-view">
+          <div class="canteen-page-head">
+            <button id="back-from-cart" class="back-btn" type="button">← Back</button>
+            <h2>Your Cart</h2>
+          </div>
+          <div class="cart-page">
+            <div id="cart-items" class="cart-page-items"></div>
+            <aside class="cart-summary-card">
+              <h3>Order summary</h3>
+              <p class="muted-text">Canteen: <strong id="cart-drawer-canteen"></strong></p>
+              <p class="muted-text">Pickup: <strong id="cart-pickup-label">Select at checkout</strong></p>
+              <div class="checkout-divider"></div>
+              <div class="checkout-total-row">
+                <span>Subtotal</span>
+                <strong id="cart-total">₹0</strong>
+              </div>
+              <p id="cart-empty-error" class="error-text hidden">Add items before proceeding to payment.</p>
+              <button id="go-to-checkout-btn" class="primary" type="button">Proceed to Payment</button>
+            </aside>
+          </div>
+        </section>
+
+        <section id="view-checkout" class="canteen-view">
+          <div class="canteen-page-head">
+            <button id="back-to-cart" class="back-btn" type="button">← Back to Cart</button>
+            <h2>Checkout</h2>
+          </div>
+          <div class="checkout-layout">
+            <div class="card panel-card">
+              <p class="section-kicker">Order summary</p>
+              <p class="checkout-canteen-label">Canteen: <span id="checkout-canteen-label"></span></p>
+              <p class="muted-text">Pickup time: <strong id="checkout-pickup-label">—</strong></p>
+              <div id="checkout-items-list" class="checkout-items"></div>
+              <div class="checkout-divider"></div>
+              <div class="checkout-total-row">
+                <span>Total amount</span>
+                <strong id="checkout-total">₹0</strong>
+              </div>
+              <div class="checkout-student-info" style="margin-top:16px">
+                <span class="muted-text">Paying as</span>
+                <strong id="checkout-student-name">Student</strong>
+              </div>
+              <h3 style="margin:20px 0 8px;font-size:1rem">Pickup time</h3>
+              <div class="slot-picker" id="slot-picker"></div>
+            </div>
+            <div class="card panel-card">
+              <p class="section-kicker">Payment authentication</p>
+              <h3>Select payment method</h3>
+              <div class="payment-method-list">
+                <label class="payment-option selected">
+                  <input type="radio" name="payment-method" value="UPI" checked /> UPI
+                </label>
+                <label class="payment-option">
+                  <input type="radio" name="payment-method" value="Card" /> Card
+                </label>
+              </div>
+              <form id="payment-auth-form" class="stack" style="margin-top:18px">
+                <label for="payment-password">Confirm with your Campus Copilot password</label>
+                <input id="payment-password" type="password" autocomplete="current-password" placeholder="Password required to verify payment" />
+                <p class="muted-text">Payment is marked successful only after the server verifies this authentication.</p>
+                <p id="checkout-error" class="error-text hidden"></p>
+                <button id="pay-btn" class="primary" type="submit">Pay <span id="pay-btn-amount">₹0</span></button>
+                <button id="cancel-payment-btn" class="ghost-button" type="button">Cancel payment</button>
+              </form>
+            </div>
+          </div>
+        </section>
+
+        <section id="view-success" class="canteen-view">
+          <div class="success-screen card">
+            <div class="success-icon-wrap"><div class="success-icon">✅</div></div>
+            <h2>PAYMENT SUCCESSFUL</h2>
+            <p id="success-order-id" class="order-list-number"></p>
+            <div class="success-meta">
+              <div><span>Canteen</span><strong id="success-canteen"></strong></div>
+              <div><span>Pickup</span><strong id="success-pickup"></strong></div>
+              <div><span>Amount paid</span><strong id="success-amount"></strong></div>
+              <div><span>Transaction ID</span><strong id="success-txn"></strong></div>
+            </div>
+            <div id="timeline" class="order-timeline">
+              <div class="timeline-step" id="ts-paid">
+                <div class="tl-dot tl-dot-active">1</div>
+                <div class="tl-content"><strong>💳 Paid</strong><span>Payment verified</span></div>
+              </div>
+              <div class="timeline-step" id="ts-preparing">
+                <div class="tl-dot">2</div>
+                <div class="tl-content"><strong>👨‍🍳 Preparing</strong><span>Kitchen is working on your order</span></div>
+              </div>
+              <div class="timeline-step" id="ts-ready">
+                <div class="tl-dot">3</div>
+                <div class="tl-content"><strong>📦 Ready</strong><span>Collect at the counter</span></div>
+              </div>
+              <div class="timeline-step" id="ts-collected">
+                <div class="tl-dot">4</div>
+                <div class="tl-content"><strong>✅ Collected</strong><span>Enjoy your meal</span></div>
+              </div>
+            </div>
+            <div class="qr-section">
+              <h3>🎫 DIGITAL PICKUP TOKEN</h3>
+              <p id="success-token-canteen" class="muted-text"></p>
+              <div class="qr-order-id" id="qr-order-number"></div>
+              <img id="qr-code-img" class="qr-code-img" alt="Pickup QR" />
+            </div>
+            <div class="success-actions">
+              <button id="view-bill-btn" class="pill-button" type="button">View Bill</button>
+              <button id="view-pickup-qr-btn" class="pill-button" type="button">View Pickup QR</button>
+              <button id="track-order-btn" class="pill-button" type="button">Track Order</button>
+              <button id="new-order-btn" class="ghost-button" type="button">Place Another Order</button>
+            </div>
+          </div>
+        </section>
+
+        <section id="view-orders" class="canteen-view">
+          <div class="canteen-page-head">
+            <button id="back-from-orders" class="back-btn" type="button">← Back</button>
+            <h2>My Orders</h2>
+          </div>
+          <div id="orders-list" class="orders-list"></div>
+        </section>
+
+        <section id="view-order-detail" class="canteen-view">
+          <div class="canteen-page-head">
+            <button id="back-to-orders" class="back-btn" type="button">← Back to Orders</button>
+            <h2>Track Order</h2>
+          </div>
+          <div id="order-detail-content" class="card order-detail-content"></div>
+        </section>
+
+        <section id="view-bill" class="canteen-view">
+          <div class="canteen-page-head no-print">
+            <button id="back-from-bill" class="back-btn" type="button">← Back</button>
+            <h2>Digital Bill</h2>
+          </div>
+          <pre id="bill-content" class="bill-content card"></pre>
+          <div class="bill-actions no-print">
+            <button id="print-bill-btn2" class="pill-button" type="button">Print Bill</button>
+            <button id="download-bill-btn" class="pill-button" type="button">Download Bill</button>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <button id="cart-fab-btn" class="cart-fab hidden" type="button" aria-label="Open Cart">
+    🛒 Cart <span id="cart-fab-count">0</span>
+  </button>
+
+  <script src="{{ url_for('static', filename='canteen.js') }}"></script>
+</body>
+</html>

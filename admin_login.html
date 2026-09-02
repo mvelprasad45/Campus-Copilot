@@ -28,7 +28,7 @@
         <label for="admin-login-password">Password</label>
         <div class="password-input">
           <input id="admin-login-password" type="password" autocomplete="current-password" placeholder="Enter your password" required>
-          <button type="button" class="password-toggle" data-target="admin-login-password" aria-label="Show password">&#128065;</button>
+          <button type="button" class="password-toggle" data-target="admin-login-password" aria-label="Show password"></button>
         </div>
         <button type="submit" class="primary">Sign In</button>
       </form>
@@ -36,15 +36,6 @@
       <p class="auth-switch">Are you a student? <a href="/student/login">Student Login</a></p>
       <p class="auth-switch support-mobile"><a href="mailto:support@college.edu">Need help? Contact support</a></p>
     </div>
-  </div>
-  <div class="auth-visual" aria-hidden="true">
-    <div class="visual-grid"></div>
-    <div class="visual-window">
-      <div class="visual-window-bar"><span></span><span></span><span></span></div>
-      <img src="{{ url_for('static', filename='campus_map.jpg') }}" alt="">
-      <div class="visual-pin">+</div>
-    </div>
-    <div class="visual-label">ONE CAMPUS<br><strong>ONE PLATFORM</strong></div>
   </div>
   <footer class="auth-footer">© 2026 College Portal <span>|</span> <a href="/student/login">Student Login</a></footer>
 </section>

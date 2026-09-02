@@ -26,7 +26,7 @@ environment settings when deploying):
   GOOGLE_API_KEY  Optional. Enables Gemini-based complaint classification.
 """
 
-from flask import Flask, request, jsonify, render_template, session, redirect, url_for
+from flask import Flask, request, jsonify, render_template, session, redirect, url_for, send_file
 from werkzeug.security import generate_password_hash, check_password_hash
 import psycopg2
 import psycopg2.extras
@@ -37,10 +37,18 @@ import time
 import secrets
 import requests
 import hashlib
+import hmac
 import smtplib
+import io
 from email.message import EmailMessage
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
+try:
+    import qrcode
+    from qrcode.image.pil import PilImage
+    QR_AVAILABLE = True
+except ImportError:
+    QR_AVAILABLE = False
 
 load_dotenv()  # reads a local .env file, if present, into environment variables
 
@@ -976,6 +984,7 @@ def admin_login_history():
 
     query = (
         "SELECT lh.id, lh.user_id, lh.user_type, lh.login_time, lh.ip_address, "
+        "lh.browser, lh.operating_system, "
         "COALESCE(s.name, a.name) AS user_name, "
         "COALESCE(s.college_email, a.email) AS user_email "
         "FROM login_history lh "
@@ -1396,8 +1405,1390 @@ def admin_dashboard_stats():
     return jsonify(stats)
 
 
+# ---------------------------------------------------------------------------
+# Canteen DB helpers
+# ---------------------------------------------------------------------------
+def init_canteen_tables():
+    """Create all Smart Canteen tables if they don't exist yet.
+    All statements are non-destructive (IF NOT EXISTS / ADD COLUMN IF NOT EXISTS)."""
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            # --- Staff role support on admins ---
+            cur.execute("ALTER TABLE admins ADD COLUMN IF NOT EXISTS canteen_id INTEGER")
+
+            # --- Canteens ---
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS canteens (
+                    id BIGSERIAL PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    location TEXT,
+                    description TEXT,
+                    image_url TEXT,
+                    status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','closed')),
+                    opening_time TEXT DEFAULT '08:00',
+                    closing_time TEXT DEFAULT '20:00',
+                    slot_interval_minutes INTEGER DEFAULT 15,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            # --- Menu items ---
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS menu_items (
+                    id BIGSERIAL PRIMARY KEY,
+                    canteen_id INTEGER NOT NULL REFERENCES canteens(id) ON DELETE CASCADE,
+                    name TEXT NOT NULL,
+                    description TEXT,
+                    price NUMERIC(10,2) NOT NULL,
+                    image_url TEXT,
+                    category TEXT DEFAULT 'General',
+                    available BOOLEAN NOT NULL DEFAULT TRUE,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMPTZ
+                )
+            """)
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_menu_items_canteen ON menu_items(canteen_id)")
+
+            # --- Orders ---
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS canteen_orders (
+                    id BIGSERIAL PRIMARY KEY,
+                    order_number TEXT NOT NULL UNIQUE,
+                    student_id INTEGER NOT NULL REFERENCES students(id),
+                    canteen_id INTEGER NOT NULL REFERENCES canteens(id),
+                    total_amount NUMERIC(10,2) NOT NULL,
+                    pickup_time TEXT NOT NULL,
+                    payment_status TEXT NOT NULL DEFAULT 'pending'
+                        CHECK (payment_status IN ('pending','paid','failed','refunded')),
+                    order_status TEXT NOT NULL DEFAULT 'pending'
+                        CHECK (order_status IN ('pending','paid','preparing','ready','collected','cancelled')),
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMPTZ
+                )
+            """)
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_canteen_orders_student ON canteen_orders(student_id)")
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_canteen_orders_canteen ON canteen_orders(canteen_id, created_at DESC)")
+
+            # --- Order items ---
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS canteen_order_items (
+                    id BIGSERIAL PRIMARY KEY,
+                    order_id INTEGER NOT NULL REFERENCES canteen_orders(id) ON DELETE CASCADE,
+                    menu_item_id INTEGER REFERENCES menu_items(id),
+                    item_name TEXT NOT NULL,
+                    item_price NUMERIC(10,2) NOT NULL,
+                    quantity INTEGER NOT NULL CHECK (quantity > 0),
+                    subtotal NUMERIC(10,2) NOT NULL
+                )
+            """)
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_order_items_order ON canteen_order_items(order_id)")
+
+            # --- Payments ---
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS canteen_payments (
+                    id BIGSERIAL PRIMARY KEY,
+                    order_id INTEGER NOT NULL REFERENCES canteen_orders(id),
+                    transaction_id TEXT UNIQUE,
+                    payment_method TEXT DEFAULT 'mock',
+                    amount NUMERIC(10,2) NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'pending'
+                        CHECK (status IN ('pending','success','failed')),
+                    paid_at TIMESTAMPTZ
+                )
+            """)
+            cur.execute("ALTER TABLE canteen_payments ADD COLUMN IF NOT EXISTS session_nonce TEXT")
+            cur.execute("ALTER TABLE canteen_payments ADD COLUMN IF NOT EXISTS session_expires_at TIMESTAMPTZ")
+            cur.execute("ALTER TABLE canteen_payments ADD COLUMN IF NOT EXISTS attempt_count INTEGER DEFAULT 0")
+            cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_canteen_payments_one_success ON canteen_payments(order_id) WHERE status = 'success'")
+
+            # --- Order status history ---
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS canteen_order_status_history (
+                    id BIGSERIAL PRIMARY KEY,
+                    order_id INTEGER NOT NULL REFERENCES canteen_orders(id) ON DELETE CASCADE,
+                    status TEXT NOT NULL,
+                    updated_by INTEGER,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            # --- Seed sample canteens if none exist ---
+            cur.execute("SELECT COUNT(*) AS cnt FROM canteens")
+            if cur.fetchone()["cnt"] == 0:
+                sample_canteens = [
+                    ("Canteen A", "Main Block, Ground Floor", "The main campus canteen serving hot meals and snacks.", "open", "07:30", "20:00"),
+                    ("Canteen B", "Engineering Block, 1st Floor", "Quick bites and beverages for engineers.", "open", "08:00", "18:00"),
+                    ("Canteen C", "Arts Block, Basement", "South Indian specials and healthy options.", "open", "07:00", "19:00"),
+                    ("Canteen D", "Hostel Block, Ground Floor", "Evening snacks and beverages.", "open", "15:00", "22:00"),
+                ]
+                for sc in sample_canteens:
+                    cur.execute(
+                        "INSERT INTO canteens (name, location, description, status, opening_time, closing_time) VALUES (%s,%s,%s,%s,%s,%s) RETURNING id",
+                        sc
+                    )
+                    cid = cur.fetchone()["id"]
+                    # seed menu items per canteen
+                    menus = {
+                        1: [
+                            ("Meals","Full South Indian thali",70,"Meals"),
+                            ("Fried Rice","Egg fried rice with gravy",80,"Rice & Noodles"),
+                            ("Sandwich","Grilled veg sandwich",50,"Snacks"),
+                            ("Burger","Veg burger with fries",60,"Snacks"),
+                            ("Tea","Hot masala tea",15,"Beverages"),
+                            ("Juice","Fresh fruit juice",30,"Beverages"),
+                            ("Chapati","Soft chapati with dal",40,"Meals"),
+                            ("Samosa","Crispy veg samosa (2 pcs)",20,"Snacks"),
+                        ],
+                        2: [
+                            ("Pizza","Veg pizza slice",100,"Fast Food"),
+                            ("Pasta","Masala pasta",90,"Fast Food"),
+                            ("Cold Coffee","Iced coffee blend",60,"Beverages"),
+                            ("Sandwich","Club sandwich",70,"Snacks"),
+                            ("Maggi","Spicy instant noodles",40,"Snacks"),
+                            ("Tea","Ginger tea",15,"Beverages"),
+                        ],
+                        3: [
+                            ("Dosa","Crispy plain dosa with chutney",40,"South Indian"),
+                            ("Idli","Soft idli with sambar (3 pcs)",30,"South Indian"),
+                            ("Vada","Medu vada (2 pcs)",25,"South Indian"),
+                            ("Pongal","Ven pongal with chutney",45,"South Indian"),
+                            ("Filter Coffee","Traditional filter coffee",20,"Beverages"),
+                            ("Sambar Rice","Rice with sambar",55,"Rice & Noodles"),
+                        ],
+                        4: [
+                            ("Pav Bhaji","Spicy pav bhaji",60,"Snacks"),
+                            ("Chai","Cutting chai",10,"Beverages"),
+                            ("Bread Omelette","Egg omelette with bread",45,"Evening Snacks"),
+                            ("Biscuits","Assorted biscuits",15,"Snacks"),
+                            ("Instant Noodles","Masala noodles",35,"Snacks"),
+                            ("Lassi","Sweet or salted lassi",40,"Beverages"),
+                        ],
+                    }
+                    idx = len(sample_canteens) - len([x for x in sample_canteens if x == sc])
+                    slot_menu = menus.get(cid, menus[1])
+                    for item in slot_menu:
+                        cur.execute(
+                            "INSERT INTO menu_items (canteen_id, name, description, price, category) VALUES (%s,%s,%s,%s,%s)",
+                            (cid, item[0], item[1], item[2], item[3])
+                        )
+
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def canteen_order_number(canteen_id: int) -> str:
+    """Generate a unique order number like CC-A1024."""
+    letter = chr(ord('A') + (canteen_id - 1) % 26)
+    suffix = secrets.randbelow(9000) + 1000
+    return f"CC-{letter}{suffix}"
+
+
+CANTEEN_HMAC_KEY = os.environ.get("SECRET_KEY", "canteen-secret").encode()
+
+
+def sign_order_token(order_number: str) -> str:
+    """Create a short HMAC token for the QR code — contains only order_number, no payment data."""
+    sig = hmac.new(CANTEEN_HMAC_KEY, order_number.encode(), hashlib.sha256).hexdigest()[:16]
+    return f"{order_number}:{sig}"
+
+
+def make_payment_session(order_id, student_id, amount, nonce, exp_ts: int) -> str:
+    payload = f"{int(order_id)}|{int(student_id)}|{float(amount):.2f}|{nonce}|{exp_ts}"
+    sig = hmac.new(CANTEEN_HMAC_KEY, payload.encode(), hashlib.sha256).hexdigest()
+    return f"{nonce}.{exp_ts}.{sig}"
+
+
+def verify_payment_session(token: str, order_id, student_id, amount) -> bool:
+    if not token or token.count(".") != 2:
+        return False
+    nonce, exp_raw, sig = token.split(".", 2)
+    try:
+        exp_ts = int(exp_raw)
+    except ValueError:
+        return False
+    if exp_ts < int(time.time()):
+        return False
+    expected = make_payment_session(order_id, student_id, amount, nonce, exp_ts)
+    return hmac.compare_digest(expected, token)
+
+
+def require_canteen_staff():
+    """Return admin record if logged in as canteen_staff, admin, or super_admin. Else None."""
+    admin_id = session.get("admin_id")
+    if not admin_id:
+        return None
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM admins WHERE id = %s AND is_active = TRUE", (admin_id,))
+    admin = cur.fetchone()
+    conn.close()
+    if not admin:
+        return None
+    if admin["role"] in ("admin", "super_admin", "canteen_staff"):
+        return admin
+    return None
+
+
+def get_canteen_for_staff(admin):
+    """Return the canteen_id(s) this staff member can manage.
+    Admins/super_admins manage all canteens (return None = no filter).
+    canteen_staff can only manage their assigned canteen."""
+    if admin["role"] in ("admin", "super_admin"):
+        return None  # all canteens
+    return admin.get("canteen_id")
+
+
+def generate_pickup_slots(opening_time: str, closing_time: str, interval: int = 15):
+    """Generate available pickup slots between opening and closing time.
+    Slots that are already in the past (relative to now) are excluded.
+    Returns list of HH:MM strings."""
+    now = datetime.now()
+    try:
+        open_h, open_m = map(int, opening_time.split(":"))
+        close_h, close_m = map(int, closing_time.split(":"))
+    except Exception:
+        open_h, open_m = 8, 0
+        close_h, close_m = 20, 0
+
+    slots = []
+    # Start at the next rounded-up interval from now (minimum 15 min ahead)
+    min_time = now + timedelta(minutes=15)
+    current = now.replace(hour=open_h, minute=open_m, second=0, microsecond=0)
+    end = now.replace(hour=close_h, minute=close_m, second=0, microsecond=0)
+
+    # round up to next interval boundary
+    while current <= end:
+        if current >= min_time:
+            slots.append(current.strftime("%H:%M"))
+        current += timedelta(minutes=interval)
+
+    return slots[:20]  # cap at 20 slots
+
+
+# ---------------------------------------------------------------------------
+# Canteen page routes
+# ---------------------------------------------------------------------------
+@app.route("/canteen")
+def canteen_page():
+    if not current_student_record():
+        return redirect(url_for("student_login_page"))
+    return render_template("canteen.html")
+
+
+@app.route("/canteen/staff")
+def canteen_staff_page():
+    staff = require_canteen_staff()
+    if not staff:
+        return redirect(url_for("admin_login_page"))
+    return render_template("canteen_staff.html")
+
+
+# ---------------------------------------------------------------------------
+# Canteen public / student APIs
+# ---------------------------------------------------------------------------
+@app.route("/api/canteens", methods=["GET"])
+def api_canteens():
+    if not current_student_record():
+        return jsonify({"error": "Not logged in"}), 401
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id, name, location, description, image_url, status, opening_time, closing_time FROM canteens ORDER BY id")
+            rows = cur.fetchall()
+        return jsonify([dict(r) for r in rows])
+    finally:
+        conn.close()
+
+
+@app.route("/api/canteens/<int:canteen_id>/menu", methods=["GET"])
+def api_canteen_menu(canteen_id):
+    if not current_student_record():
+        return jsonify({"error": "Not logged in"}), 401
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id, name, status FROM canteens WHERE id = %s", (canteen_id,))
+            canteen = cur.fetchone()
+            if not canteen:
+                return jsonify({"error": "Canteen not found"}), 404
+            cur.execute(
+                "SELECT id, name, description, price, image_url, category, available FROM menu_items WHERE canteen_id = %s ORDER BY category, name",
+                (canteen_id,)
+            )
+            items = cur.fetchall()
+        return jsonify({"canteen": dict(canteen), "items": [dict(i) for i in items]})
+    finally:
+        conn.close()
+
+
+@app.route("/api/canteens/<int:canteen_id>/slots", methods=["GET"])
+def api_canteen_slots(canteen_id):
+    if not current_student_record():
+        return jsonify({"error": "Not logged in"}), 401
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT status, opening_time, closing_time, slot_interval_minutes FROM canteens WHERE id = %s", (canteen_id,))
+            canteen = cur.fetchone()
+            if not canteen:
+                return jsonify({"error": "Canteen not found"}), 404
+            if canteen["status"] == "closed":
+                return jsonify({"slots": [], "canteen_open": False})
+        slots = generate_pickup_slots(canteen["opening_time"], canteen["closing_time"], canteen["slot_interval_minutes"] or 15)
+        return jsonify({"slots": slots, "canteen_open": True})
+    finally:
+        conn.close()
+
+
+@app.route("/api/canteen/orders", methods=["POST"])
+def api_create_canteen_order():
+    student = current_student_record()
+    if not student:
+        return jsonify({"error": "Not logged in"}), 401
+
+    data = request.get_json(force=True)
+    canteen_id = data.get("canteen_id")
+    pickup_time = data.get("pickup_time", "").strip()
+    items = data.get("items", [])  # [{menu_item_id, quantity}]
+
+    if not canteen_id or not pickup_time or not items:
+        return jsonify({"error": "canteen_id, pickup_time and items are required"}), 400
+    if not re.fullmatch(r"\d{1,2}:\d{2}", pickup_time):
+        return jsonify({"error": "Invalid pickup_time format"}), 400
+
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            # Validate canteen is open
+            cur.execute("SELECT id, name, status FROM canteens WHERE id = %s", (canteen_id,))
+            canteen = cur.fetchone()
+            if not canteen:
+                return jsonify({"error": "Canteen not found"}), 404
+            if canteen["status"] == "closed":
+                return jsonify({"error": "This canteen is currently closed"}), 400
+
+            # Validate items and compute total
+            total = 0
+            resolved_items = []
+            for it in items:
+                mid = it.get("menu_item_id")
+                qty = int(it.get("quantity", 1))
+                if qty < 1:
+                    return jsonify({"error": "Quantity must be at least 1"}), 400
+                cur.execute(
+                    "SELECT id, name, price, available, canteen_id FROM menu_items WHERE id = %s",
+                    (mid,)
+                )
+                menu_item = cur.fetchone()
+                if not menu_item:
+                    return jsonify({"error": f"Menu item {mid} not found"}), 404
+                if menu_item["canteen_id"] != canteen_id:
+                    return jsonify({"error": "Item does not belong to selected canteen"}), 400
+                if not menu_item["available"]:
+                    return jsonify({"error": f"{menu_item['name']} is currently unavailable"}), 400
+                subtotal = float(menu_item["price"]) * qty
+                total += subtotal
+                resolved_items.append({
+                    "menu_item_id": mid,
+                    "item_name": menu_item["name"],
+                    "item_price": float(menu_item["price"]),
+                    "quantity": qty,
+                    "subtotal": subtotal,
+                })
+
+            # Reuse a recent unpaid pending order for the same cart to avoid duplicates
+            item_sig = tuple(sorted((int(ri["menu_item_id"]), int(ri["quantity"])) for ri in resolved_items))
+            cur.execute(
+                """
+                SELECT id, order_number, total_amount, pickup_time
+                FROM canteen_orders
+                WHERE student_id = %s AND canteen_id = %s AND payment_status = 'pending'
+                  AND order_status = 'pending' AND created_at > NOW() - INTERVAL '20 minutes'
+                ORDER BY id DESC
+                LIMIT 8
+                """,
+                (student["id"], canteen_id),
+            )
+            for existing in cur.fetchall() or []:
+                cur.execute(
+                    "SELECT menu_item_id, quantity FROM canteen_order_items WHERE order_id = %s",
+                    (existing["id"],),
+                )
+                existing_sig = tuple(sorted((int(r["menu_item_id"] or 0), int(r["quantity"])) for r in cur.fetchall()))
+                if existing_sig == item_sig and str(existing["pickup_time"]) == pickup_time:
+                    return jsonify({
+                        "order_id": existing["id"],
+                        "order_number": existing["order_number"],
+                        "total": float(existing["total_amount"]),
+                        "resumed": True,
+                    }), 200
+
+            # Generate unique order number
+            for _ in range(5):
+                order_num = canteen_order_number(canteen_id)
+                cur.execute("SELECT id FROM canteen_orders WHERE order_number = %s", (order_num,))
+                if not cur.fetchone():
+                    break
+
+            cur.execute(
+                """
+                INSERT INTO canteen_orders
+                  (order_number, student_id, canteen_id, total_amount, pickup_time, payment_status, order_status, created_at)
+                VALUES (%s, %s, %s, %s, %s, 'pending', 'pending', %s) RETURNING id
+                """,
+                (order_num, student["id"], canteen_id, total, pickup_time, datetime.now())
+            )
+            order_id = cur.fetchone()["id"]
+
+            for ri in resolved_items:
+                cur.execute(
+                    "INSERT INTO canteen_order_items (order_id, menu_item_id, item_name, item_price, quantity, subtotal) VALUES (%s,%s,%s,%s,%s,%s)",
+                    (order_id, ri["menu_item_id"], ri["item_name"], ri["item_price"], ri["quantity"], ri["subtotal"])
+                )
+
+            # Create pending payment record
+            cur.execute(
+                "INSERT INTO canteen_payments (order_id, amount, status) VALUES (%s, %s, 'pending')",
+                (order_id, total)
+            )
+
+            # Status history
+            cur.execute(
+                "INSERT INTO canteen_order_status_history (order_id, status, updated_by) VALUES (%s, 'pending', %s)",
+                (order_id, student["id"])
+            )
+
+        conn.commit()
+        return jsonify({"order_id": order_id, "order_number": order_num, "total": total}), 201
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+@app.route("/api/canteen/orders/<int:order_id>/payment-session", methods=["POST"])
+def api_canteen_payment_session(order_id):
+    """Create a signed payment session. Does not mark the order as paid."""
+    student = current_student_record()
+    if not student:
+        return jsonify({"error": "Not logged in"}), 401
+
+    data = request.get_json(silent=True) or {}
+    payment_method = (data.get("payment_method") or "UPI").strip() or "UPI"
+    if payment_method not in ("UPI", "Card"):
+        return jsonify({"error": "Unsupported payment method"}), 400
+
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT * FROM canteen_orders WHERE id = %s AND student_id = %s FOR UPDATE",
+                (order_id, student["id"]),
+            )
+            order = cur.fetchone()
+            if not order:
+                return jsonify({"error": "Order not found"}), 404
+
+            cur.execute(
+                "SELECT * FROM canteen_payments WHERE order_id = %s ORDER BY id DESC LIMIT 1",
+                (order_id,),
+            )
+            payment = cur.fetchone()
+
+            if order["payment_status"] == "paid" or (payment and payment["status"] == "success"):
+                return jsonify({
+                    "status": "already_paid",
+                    "order_id": order_id,
+                    "order_number": order["order_number"],
+                    "transaction_id": payment["transaction_id"] if payment else None,
+                    "total": float(order["total_amount"]),
+                })
+
+            if order["payment_status"] not in ("pending", "failed"):
+                return jsonify({"error": "Order cannot be paid in its current state"}), 400
+
+            nonce = secrets.token_hex(16)
+            exp_ts = int(time.time()) + 10 * 60
+            token = make_payment_session(order_id, student["id"], order["total_amount"], nonce, exp_ts)
+
+            if payment:
+                cur.execute(
+                    """
+                    UPDATE canteen_payments
+                    SET payment_method=%s, status='pending', session_nonce=%s,
+                        session_expires_at=to_timestamp(%s), attempt_count=COALESCE(attempt_count,0)
+                    WHERE id=%s
+                    """,
+                    (payment_method, nonce, exp_ts, payment["id"]),
+                )
+            else:
+                cur.execute(
+                    """
+                    INSERT INTO canteen_payments
+                      (order_id, amount, status, payment_method, session_nonce, session_expires_at, attempt_count)
+                    VALUES (%s, %s, 'pending', %s, %s, to_timestamp(%s), 0)
+                    """,
+                    (order_id, order["total_amount"], payment_method, nonce, exp_ts),
+                )
+
+            if order["payment_status"] == "failed":
+                cur.execute(
+                    "UPDATE canteen_orders SET payment_status='pending', updated_at=%s WHERE id=%s",
+                    (datetime.now(), order_id),
+                )
+
+        conn.commit()
+        return jsonify({
+            "status": "requires_authentication",
+            "order_id": order_id,
+            "order_number": order["order_number"],
+            "payment_session": token,
+            "payment_method": payment_method,
+            "amount": float(order["total_amount"]),
+            "expires_in": 600,
+        })
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+@app.route("/api/canteen/orders/<int:order_id>/verify-payment", methods=["POST"])
+def api_verify_canteen_payment(order_id):
+    """Mark paid only after session HMAC + student password authentication."""
+    student = current_student_record()
+    if not student:
+        return jsonify({"error": "Not logged in"}), 401
+
+    data = request.get_json(force=True) or {}
+    session_token = (data.get("payment_session") or "").strip()
+    password = data.get("password") or ""
+    payment_method = (data.get("payment_method") or "UPI").strip() or "UPI"
+    outcome = (data.get("outcome") or "success").strip().lower()
+
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT * FROM canteen_orders WHERE id = %s AND student_id = %s FOR UPDATE",
+                (order_id, student["id"]),
+            )
+            order = cur.fetchone()
+            if not order:
+                return jsonify({"error": "Order not found"}), 404
+
+            cur.execute(
+                "SELECT * FROM canteen_payments WHERE order_id = %s ORDER BY id DESC LIMIT 1 FOR UPDATE",
+                (order_id,),
+            )
+            payment = cur.fetchone()
+
+            # Duplicate callback / refresh after success — return existing paid order, do not insert another.
+            if order["payment_status"] == "paid" or (payment and payment["status"] == "success"):
+                return jsonify({
+                    "status": "already_paid",
+                    "message": "Payment already verified",
+                    "transaction_id": payment["transaction_id"] if payment else None,
+                    "order_number": order["order_number"],
+                    "order_id": order_id,
+                    "payment_status": "paid",
+                    "order_status": order["order_status"],
+                })
+
+            if not payment or payment["status"] not in ("pending", "failed"):
+                return jsonify({"error": "No pending payment for this order"}), 400
+
+            if not verify_payment_session(session_token, order_id, student["id"], order["total_amount"]):
+                return jsonify({"error": "Invalid or expired payment session"}), 400
+
+            if payment.get("session_nonce") and session_token.split(".", 1)[0] != payment["session_nonce"]:
+                return jsonify({"error": "Payment session does not match this order"}), 400
+
+            if outcome in ("fail", "failed", "failure"):
+                cur.execute(
+                    "UPDATE canteen_payments SET status='failed', payment_method=%s WHERE id=%s",
+                    (payment_method, payment["id"]),
+                )
+                cur.execute(
+                    "UPDATE canteen_orders SET payment_status='failed', updated_at=%s WHERE id=%s",
+                    (datetime.now(), order_id),
+                )
+                conn.commit()
+                return jsonify({"status": "failed", "error": "Payment failed", "order_id": order_id}), 402
+
+            if outcome in ("cancel", "cancelled", "canceled"):
+                cur.execute(
+                    "UPDATE canteen_payments SET session_nonce=NULL, session_expires_at=NULL WHERE id=%s",
+                    (payment["id"],),
+                )
+                conn.commit()
+                return jsonify({"status": "cancelled", "order_id": order_id, "payment_status": "pending"})
+
+            attempts = int(payment.get("attempt_count") or 0)
+            if attempts >= 5:
+                cur.execute(
+                    "UPDATE canteen_payments SET status='failed' WHERE id=%s",
+                    (payment["id"],),
+                )
+                cur.execute(
+                    "UPDATE canteen_orders SET payment_status='failed', updated_at=%s WHERE id=%s",
+                    (datetime.now(), order_id),
+                )
+                conn.commit()
+                return jsonify({"error": "Too many failed authentication attempts"}), 429
+
+            if not password or not check_password_hash(student["password_hash"], password):
+                cur.execute(
+                    "UPDATE canteen_payments SET attempt_count = COALESCE(attempt_count,0) + 1 WHERE id=%s",
+                    (payment["id"],),
+                )
+                conn.commit()
+                return jsonify({
+                    "status": "authentication_failed",
+                    "error": "Payment authentication failed. Re-enter your Campus Copilot password.",
+                }), 401
+
+            txn_id = "TXN" + secrets.token_hex(8).upper()
+            paid_at = datetime.now()
+
+            try:
+                cur.execute(
+                    """
+                    UPDATE canteen_payments
+                    SET transaction_id=%s, payment_method=%s, status='success', paid_at=%s,
+                        session_nonce=NULL, session_expires_at=NULL
+                    WHERE id=%s AND status <> 'success'
+                    """,
+                    (txn_id, payment_method, paid_at, payment["id"]),
+                )
+            except Exception:
+                conn.rollback()
+                cur.execute(
+                    "SELECT transaction_id, status FROM canteen_payments WHERE order_id = %s AND status = 'success' LIMIT 1",
+                    (order_id,),
+                )
+                existing_ok = cur.fetchone()
+                if existing_ok:
+                    return jsonify({
+                        "status": "already_paid",
+                        "message": "Payment already verified",
+                        "transaction_id": existing_ok["transaction_id"],
+                        "order_number": order["order_number"],
+                        "order_id": order_id,
+                    })
+                raise
+
+            cur.execute(
+                "UPDATE canteen_orders SET payment_status='paid', order_status='paid', updated_at=%s WHERE id=%s AND payment_status <> 'paid'",
+                (paid_at, order_id),
+            )
+            cur.execute(
+                "INSERT INTO canteen_order_status_history (order_id, status, updated_by) VALUES (%s, 'paid', %s)",
+                (order_id, student["id"]),
+            )
+
+            try:
+                cur.execute("SELECT name FROM canteens WHERE id = %s", (order["canteen_id"],))
+                cname = cur.fetchone()["name"]
+                cur.execute(
+                    """INSERT INTO notifications (student_id, title, message, created_at)
+                       VALUES (%s, %s, %s, %s)
+                       ON CONFLICT DO NOTHING""",
+                    (student["id"],
+                     "Payment Successful ✅",
+                     f"Your order {order['order_number']} from {cname} is confirmed. Pickup at {order['pickup_time']}.",
+                     paid_at),
+                )
+            except Exception:
+                pass
+
+        conn.commit()
+        return jsonify({
+            "status": "success",
+            "message": "Payment verified",
+            "transaction_id": txn_id,
+            "order_number": order["order_number"],
+            "order_id": order_id,
+            "payment_status": "paid",
+            "order_status": "paid",
+            "payment_method": payment_method,
+        })
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+@app.route("/api/canteen/orders/<int:order_id>/cancel-payment", methods=["POST"])
+def api_cancel_canteen_payment(order_id):
+    student = current_student_record()
+    if not student:
+        return jsonify({"error": "Not logged in"}), 401
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT * FROM canteen_orders WHERE id = %s AND student_id = %s FOR UPDATE",
+                (order_id, student["id"]),
+            )
+            order = cur.fetchone()
+            if not order:
+                return jsonify({"error": "Order not found"}), 404
+            if order["payment_status"] == "paid":
+                return jsonify({"error": "Paid orders cannot be cancelled from checkout"}), 400
+            cur.execute(
+                "UPDATE canteen_payments SET session_nonce=NULL, session_expires_at=NULL WHERE order_id=%s AND status='pending'",
+                (order_id,),
+            )
+        conn.commit()
+        return jsonify({"status": "cancelled", "order_id": order_id, "payment_status": order["payment_status"]})
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+@app.route("/api/canteen/orders/<int:order_id>/pay", methods=["POST"])
+def api_pay_canteen_order(order_id):
+    """Legacy path — never marks paid from the client. Requires verification."""
+    return jsonify({
+        "error": "Direct payment is not allowed. Authenticate the payment session so the backend can verify it.",
+        "next": "POST /api/canteen/orders/<id>/payment-session then POST /verify-payment",
+    }), 400
+
+
+@app.route("/api/canteen/orders", methods=["GET"])
+def api_my_canteen_orders():
+    student = current_student_record()
+    if not student:
+        return jsonify({"error": "Not logged in"}), 401
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT o.id, o.order_number, o.total_amount, o.pickup_time,
+                       o.payment_status, o.order_status, o.created_at,
+                       c.name AS canteen_name
+                FROM canteen_orders o
+                JOIN canteens c ON c.id = o.canteen_id
+                WHERE o.student_id = %s
+                ORDER BY o.created_at DESC
+                """,
+                (student["id"],)
+            )
+            rows = cur.fetchall()
+        return jsonify([dict(r) for r in rows])
+    finally:
+        conn.close()
+
+
+@app.route("/api/canteen/orders/<int:order_id>", methods=["GET"])
+def api_canteen_order_detail(order_id):
+    student = current_student_record()
+    if not student:
+        return jsonify({"error": "Not logged in"}), 401
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT o.*, c.name AS canteen_name, c.location AS canteen_location
+                FROM canteen_orders o
+                JOIN canteens c ON c.id = o.canteen_id
+                WHERE o.id = %s AND o.student_id = %s
+                """,
+                (order_id, student["id"])
+            )
+            order = cur.fetchone()
+            if not order:
+                return jsonify({"error": "Order not found"}), 404
+            cur.execute(
+                "SELECT item_name, item_price, quantity, subtotal FROM canteen_order_items WHERE order_id = %s",
+                (order_id,)
+            )
+            items = cur.fetchall()
+            cur.execute(
+                """
+                SELECT transaction_id, payment_method, amount, status, paid_at
+                FROM canteen_payments
+                WHERE order_id = %s
+                ORDER BY (status = 'success') DESC, id DESC
+                LIMIT 1
+                """,
+                (order_id,)
+            )
+            payment = cur.fetchone()
+            cur.execute(
+                "SELECT status, created_at FROM canteen_order_status_history WHERE order_id = %s ORDER BY id",
+                (order_id,)
+            )
+            history = cur.fetchall()
+        result = dict(order)
+        result["items"] = [dict(i) for i in items]
+        pay = dict(payment) if payment else {}
+        history_rows = [dict(h) for h in history]
+
+        def _json_safe(value):
+            if hasattr(value, "isoformat"):
+                return value.isoformat()
+            try:
+                from decimal import Decimal
+                if isinstance(value, Decimal):
+                    return float(value)
+            except Exception:
+                pass
+            return value
+
+        for key, value in list(result.items()):
+            result[key] = _json_safe(value)
+        for item in result["items"]:
+            for key, value in list(item.items()):
+                item[key] = _json_safe(value)
+        for key, value in list(pay.items()):
+            pay[key] = _json_safe(value)
+        for row in history_rows:
+            for key, value in list(row.items()):
+                row[key] = _json_safe(value)
+        result["payment"] = pay
+        result["status_history"] = history_rows
+        return jsonify(result)
+    finally:
+        conn.close()
+
+
+@app.route("/api/canteen/orders/<int:order_id>/qr", methods=["GET"])
+def api_canteen_order_qr(order_id):
+    student = current_student_record()
+    if not student:
+        return jsonify({"error": "Not logged in"}), 401
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT order_number, payment_status FROM canteen_orders WHERE id = %s AND student_id = %s",
+                (order_id, student["id"])
+            )
+            order = cur.fetchone()
+            if not order:
+                return jsonify({"error": "Order not found"}), 404
+            if order["payment_status"] != "paid":
+                return jsonify({"error": "QR code only available for paid orders"}), 400
+    finally:
+        conn.close()
+
+    token = sign_order_token(order["order_number"])
+    if not QR_AVAILABLE:
+        return jsonify({"error": "QR generation not available"}), 503
+
+    img = qrcode.make(token)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    return send_file(buf, mimetype="image/png")
+
+
+# ---------------------------------------------------------------------------
+# Canteen Staff APIs
+# ---------------------------------------------------------------------------
+@app.route("/api/canteen/staff/orders", methods=["GET"])
+def api_staff_orders():
+    staff = require_canteen_staff()
+    if not staff:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    staff_canteen_id = get_canteen_for_staff(staff)
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            if staff_canteen_id:
+                cur.execute(
+                    """
+                    SELECT o.id, o.order_number, o.total_amount, o.pickup_time,
+                           o.payment_status, o.order_status, o.created_at,
+                           s.name AS student_name, s.roll_number
+                    FROM canteen_orders o
+                    JOIN students s ON s.id = o.student_id
+                    WHERE o.canteen_id = %s AND o.payment_status = 'paid'
+                    AND o.created_at::date = CURRENT_DATE
+                    ORDER BY o.pickup_time, o.id
+                    """,
+                    (staff_canteen_id,)
+                )
+            else:
+                # Admin: can filter by canteen_id query param
+                filter_cid = request.args.get("canteen_id", type=int)
+                if filter_cid:
+                    cur.execute(
+                        """
+                        SELECT o.id, o.order_number, o.total_amount, o.pickup_time,
+                               o.payment_status, o.order_status, o.created_at,
+                               s.name AS student_name, s.roll_number,
+                               c.name AS canteen_name
+                        FROM canteen_orders o
+                        JOIN students s ON s.id = o.student_id
+                        JOIN canteens c ON c.id = o.canteen_id
+                        WHERE o.canteen_id = %s AND o.payment_status = 'paid'
+                        AND o.created_at::date = CURRENT_DATE
+                        ORDER BY o.pickup_time, o.id
+                        """,
+                        (filter_cid,)
+                    )
+                else:
+                    cur.execute(
+                        """
+                        SELECT o.id, o.order_number, o.total_amount, o.pickup_time,
+                               o.payment_status, o.order_status, o.created_at,
+                               s.name AS student_name, s.roll_number,
+                               c.name AS canteen_name
+                        FROM canteen_orders o
+                        JOIN students s ON s.id = o.student_id
+                        JOIN canteens c ON c.id = o.canteen_id
+                        WHERE o.payment_status = 'paid'
+                        AND o.created_at::date = CURRENT_DATE
+                        ORDER BY o.pickup_time, o.id
+                        """
+                    )
+            rows = cur.fetchall()
+            # Fetch items for each order
+            result = []
+            for row in rows:
+                d = dict(row)
+                cur.execute(
+                    "SELECT item_name, item_price, quantity, subtotal FROM canteen_order_items WHERE order_id = %s",
+                    (d["id"],)
+                )
+                d["items"] = [dict(i) for i in cur.fetchall()]
+                result.append(d)
+        return jsonify(result)
+    finally:
+        conn.close()
+
+
+@app.route("/api/canteen/staff/orders/<int:order_id>/status", methods=["POST"])
+def api_staff_update_order_status(order_id):
+    staff = require_canteen_staff()
+    if not staff:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    data = request.get_json(force=True)
+    new_status = data.get("status", "")
+    valid_staff_transitions = ["preparing", "ready", "collected"]
+    if new_status not in valid_staff_transitions:
+        return jsonify({"error": f"status must be one of {valid_staff_transitions}"}), 400
+
+    staff_canteen_id = get_canteen_for_staff(staff)
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            query = "SELECT o.*, c.name AS canteen_name FROM canteen_orders o JOIN canteens c ON c.id = o.canteen_id WHERE o.id = %s"
+            params = [order_id]
+            if staff_canteen_id:
+                query += " AND o.canteen_id = %s"
+                params.append(staff_canteen_id)
+            cur.execute(query, params)
+            order = cur.fetchone()
+            if not order:
+                return jsonify({"error": "Order not found or not authorized"}), 404
+
+            cur.execute(
+                "UPDATE canteen_orders SET order_status = %s, updated_at = %s WHERE id = %s",
+                (new_status, datetime.now(), order_id)
+            )
+            cur.execute(
+                "INSERT INTO canteen_order_status_history (order_id, status, updated_by) VALUES (%s, %s, %s)",
+                (order_id, new_status, staff["id"])
+            )
+
+            # Notify student when order is ready
+            if new_status == "ready":
+                try:
+                    cur.execute(
+                        """INSERT INTO notifications (student_id, title, message, created_at)
+                           VALUES (%s, %s, %s, %s)
+                           ON CONFLICT DO NOTHING""",
+                        (order["student_id"],
+                         "🍱 Your order is ready!",
+                         f"Order {order['order_number']} from {order['canteen_name']} is ready. Please collect it now.",
+                         datetime.now())
+                    )
+                except Exception:
+                    pass
+
+        conn.commit()
+        return jsonify({"message": "Status updated", "status": new_status})
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+@app.route("/api/canteen/staff/menu", methods=["GET"])
+def api_staff_menu():
+    staff = require_canteen_staff()
+    if not staff:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    staff_canteen_id = get_canteen_for_staff(staff)
+    canteen_id = request.args.get("canteen_id", type=int) or staff_canteen_id
+    if not canteen_id:
+        return jsonify({"error": "canteen_id required"}), 400
+
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT * FROM menu_items WHERE canteen_id = %s ORDER BY category, name",
+                (canteen_id,)
+            )
+            rows = cur.fetchall()
+        return jsonify([dict(r) for r in rows])
+    finally:
+        conn.close()
+
+
+@app.route("/api/canteen/staff/menu", methods=["POST"])
+def api_staff_add_menu_item():
+    staff = require_canteen_staff()
+    if not staff:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    data = request.get_json(force=True)
+    name = data.get("name", "").strip()
+    price = data.get("price")
+    if not name or price is None:
+        return jsonify({"error": "name and price are required"}), 400
+    try:
+        price = float(price)
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid price"}), 400
+
+    staff_canteen_id = get_canteen_for_staff(staff)
+    canteen_id = data.get("canteen_id") or staff_canteen_id
+    if not canteen_id:
+        return jsonify({"error": "canteen_id required"}), 400
+    # canteen_staff can only add to their own canteen
+    if staff["role"] == "canteen_staff" and int(canteen_id) != staff_canteen_id:
+        return jsonify({"error": "Not authorized for this canteen"}), 403
+
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO menu_items (canteen_id, name, description, price, image_url, category, available) VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+                (canteen_id, name, data.get("description",""), price, data.get("image_url",""), data.get("category","General"), data.get("available", True))
+            )
+            new_id = cur.fetchone()["id"]
+        conn.commit()
+        return jsonify({"message": "Menu item added", "id": new_id}), 201
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+@app.route("/api/canteen/staff/menu/<int:item_id>", methods=["PUT"])
+def api_staff_update_menu_item(item_id):
+    staff = require_canteen_staff()
+    if not staff:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    data = request.get_json(force=True)
+    staff_canteen_id = get_canteen_for_staff(staff)
+
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT canteen_id FROM menu_items WHERE id = %s", (item_id,))
+            item = cur.fetchone()
+            if not item:
+                return jsonify({"error": "Item not found"}), 404
+            if staff["role"] == "canteen_staff" and item["canteen_id"] != staff_canteen_id:
+                return jsonify({"error": "Not authorized for this canteen"}), 403
+
+            cur.execute(
+                "UPDATE menu_items SET name=%s, description=%s, price=%s, image_url=%s, category=%s, available=%s, updated_at=%s WHERE id=%s",
+                (
+                    data.get("name"), data.get("description",""),
+                    float(data.get("price", 0)), data.get("image_url",""),
+                    data.get("category","General"), data.get("available", True),
+                    datetime.now(), item_id
+                )
+            )
+        conn.commit()
+        return jsonify({"message": "Menu item updated"})
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+@app.route("/api/canteen/staff/menu/<int:item_id>", methods=["DELETE"])
+def api_staff_delete_menu_item(item_id):
+    staff = require_canteen_staff()
+    if not staff:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    staff_canteen_id = get_canteen_for_staff(staff)
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT canteen_id FROM menu_items WHERE id = %s", (item_id,))
+            item = cur.fetchone()
+            if not item:
+                return jsonify({"error": "Item not found"}), 404
+            if staff["role"] == "canteen_staff" and item["canteen_id"] != staff_canteen_id:
+                return jsonify({"error": "Not authorized"}), 403
+            # Soft-delete: mark unavailable instead of deleting (preserve order history)
+            cur.execute("UPDATE menu_items SET available=FALSE, updated_at=%s WHERE id=%s", (datetime.now(), item_id))
+        conn.commit()
+        return jsonify({"message": "Item deactivated"})
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+@app.route("/api/canteen/staff/analytics", methods=["GET"])
+def api_staff_analytics():
+    staff = require_canteen_staff()
+    if not staff:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    staff_canteen_id = get_canteen_for_staff(staff)
+    canteen_id = request.args.get("canteen_id", type=int) or staff_canteen_id
+
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            params_today = [canteen_id] if canteen_id else []
+            canteen_filter = "AND o.canteen_id = %s" if canteen_id else ""
+
+            # Today's order counts
+            cur.execute(f"""
+                SELECT COUNT(*) AS total,
+                       COUNT(*) FILTER (WHERE o.payment_status='paid') AS paid,
+                       COUNT(*) FILTER (WHERE o.order_status='preparing') AS preparing,
+                       COUNT(*) FILTER (WHERE o.order_status='ready') AS ready,
+                       COUNT(*) FILTER (WHERE o.order_status='collected') AS collected,
+                       COUNT(*) FILTER (WHERE o.order_status='cancelled') AS cancelled,
+                       COALESCE(SUM(o.total_amount) FILTER (WHERE o.payment_status='paid'), 0) AS revenue
+                FROM canteen_orders o
+                WHERE o.created_at::date = CURRENT_DATE {canteen_filter}
+            """, params_today)
+            today = dict(cur.fetchone())
+
+            # Weekly orders
+            cur.execute(f"""
+                SELECT COUNT(*) AS total,
+                       COALESCE(SUM(o.total_amount) FILTER (WHERE o.payment_status='paid'), 0) AS revenue
+                FROM canteen_orders o
+                WHERE o.created_at >= CURRENT_DATE - INTERVAL '7 days' {canteen_filter}
+            """, params_today)
+            weekly = dict(cur.fetchone())
+
+            # Top items today
+            cur.execute(f"""
+                SELECT oi.item_name, SUM(oi.quantity) AS qty
+                FROM canteen_order_items oi
+                JOIN canteen_orders o ON o.id = oi.order_id
+                WHERE o.created_at::date = CURRENT_DATE {canteen_filter}
+                GROUP BY oi.item_name ORDER BY qty DESC LIMIT 10
+            """, params_today)
+            top_items = [dict(r) for r in cur.fetchall()]
+
+            # Orders by pickup slot (today)
+            cur.execute(f"""
+                SELECT o.pickup_time, COUNT(*) AS order_count
+                FROM canteen_orders o
+                WHERE o.created_at::date = CURRENT_DATE
+                  AND o.payment_status = 'paid' {canteen_filter}
+                GROUP BY o.pickup_time ORDER BY o.pickup_time
+            """, params_today)
+            by_slot = [dict(r) for r in cur.fetchall()]
+
+            # AI demand insight: 4-week rolling average per item (same day of week)
+            cur.execute(f"""
+                SELECT oi.item_name,
+                       ROUND(AVG(daily.qty)) AS historical_avg
+                FROM (
+                    SELECT oi2.item_name, o2.created_at::date AS d, SUM(oi2.quantity) AS qty
+                    FROM canteen_order_items oi2
+                    JOIN canteen_orders o2 ON o2.id = oi2.order_id
+                    WHERE o2.created_at >= CURRENT_DATE - INTERVAL '28 days'
+                      AND o2.created_at::date != CURRENT_DATE
+                      AND EXTRACT(DOW FROM o2.created_at) = EXTRACT(DOW FROM CURRENT_DATE)
+                      {canteen_filter.replace('o.', 'o2.')}
+                    GROUP BY oi2.item_name, o2.created_at::date
+                ) daily
+                JOIN canteen_order_items oi ON oi.item_name = daily.item_name
+                JOIN canteen_orders o ON o.id = oi.order_id
+                WHERE o.created_at::date = CURRENT_DATE {canteen_filter}
+                GROUP BY oi.item_name
+                ORDER BY historical_avg DESC
+                LIMIT 10
+            """, params_today + params_today)
+            demand_insight = [dict(r) for r in cur.fetchall()]
+
+            # Current confirmed orders per item (today)
+            cur.execute(f"""
+                SELECT oi.item_name, SUM(oi.quantity) AS confirmed_qty
+                FROM canteen_order_items oi
+                JOIN canteen_orders o ON o.id = oi.order_id
+                WHERE o.created_at::date = CURRENT_DATE
+                  AND o.payment_status = 'paid' {canteen_filter}
+                GROUP BY oi.item_name ORDER BY confirmed_qty DESC
+            """, params_today)
+            confirmed_today = {r["item_name"]: int(r["confirmed_qty"]) for r in cur.fetchall()}
+
+            # Merge demand insight with confirmed
+            for d in demand_insight:
+                d["confirmed_qty"] = confirmed_today.get(d["item_name"], 0)
+                d["recommended"] = max(int(d["historical_avg"] or 0), d["confirmed_qty"])
+
+        return jsonify({
+            "today": today,
+            "weekly": weekly,
+            "top_items": top_items,
+            "by_slot": by_slot,
+            "demand_insight": demand_insight,
+        })
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Admin Canteen Management APIs
+# ---------------------------------------------------------------------------
+@app.route("/api/admin/canteens", methods=["GET"])
+def api_admin_get_canteens():
+    if not require_admin():
+        return jsonify({"error": "Unauthorized"}), 401
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM canteens ORDER BY id")
+            rows = cur.fetchall()
+        return jsonify([dict(r) for r in rows])
+    finally:
+        conn.close()
+
+
+@app.route("/api/admin/canteens", methods=["POST"])
+def api_admin_create_canteen():
+    if not require_admin():
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json(force=True)
+    name = data.get("name", "").strip()
+    if not name:
+        return jsonify({"error": "name is required"}), 400
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO canteens (name, location, description, status, opening_time, closing_time, slot_interval_minutes) VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+                (name, data.get("location",""), data.get("description",""), data.get("status","open"), data.get("opening_time","08:00"), data.get("closing_time","20:00"), data.get("slot_interval_minutes",15))
+            )
+            new_id = cur.fetchone()["id"]
+        conn.commit()
+        return jsonify({"message": "Canteen created", "id": new_id}), 201
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+@app.route("/api/admin/canteens/<int:canteen_id>", methods=["PUT"])
+def api_admin_update_canteen(canteen_id):
+    if not require_admin():
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json(force=True)
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE canteens SET name=%s, location=%s, description=%s, opening_time=%s, closing_time=%s, slot_interval_minutes=%s WHERE id=%s",
+                (data.get("name"), data.get("location",""), data.get("description",""), data.get("opening_time","08:00"), data.get("closing_time","20:00"), data.get("slot_interval_minutes",15), canteen_id)
+            )
+        conn.commit()
+        return jsonify({"message": "Canteen updated"})
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+@app.route("/api/admin/canteens/<int:canteen_id>/status", methods=["POST"])
+def api_admin_toggle_canteen_status(canteen_id):
+    if not require_admin():
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json(force=True)
+    status = data.get("status", "open")
+    if status not in ("open", "closed"):
+        return jsonify({"error": "status must be open or closed"}), 400
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE canteens SET status=%s WHERE id=%s", (status, canteen_id))
+        conn.commit()
+        return jsonify({"message": f"Canteen is now {status}"})
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+@app.route("/api/admin/canteen-staff", methods=["POST"])
+def api_admin_create_canteen_staff():
+    if not require_admin():
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json(force=True)
+    name = data.get("name", "").strip()
+    email = data.get("email", "").strip().lower()
+    password = data.get("password", "")
+    canteen_id = data.get("canteen_id")
+    if not name or not email or not password or not canteen_id:
+        return jsonify({"error": "name, email, password and canteen_id are required"}), 400
+    if len(password) < 8:
+        return jsonify({"error": "Password must be at least 8 characters"}), 400
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id FROM admins WHERE email = %s", (email,))
+            if cur.fetchone():
+                return jsonify({"error": "An account with this email already exists"}), 409
+            cur.execute(
+                "INSERT INTO admins (name, email, password_hash, role, canteen_id, is_active, created_at) VALUES (%s,%s,%s,'canteen_staff',%s,TRUE,%s) RETURNING id",
+                (name, email, generate_password_hash(password), canteen_id, datetime.now())
+            )
+        conn.commit()
+        return jsonify({"message": "Canteen staff account created"}), 201
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
 init_db()  # validate the existing PostgreSQL tables and initialize the admin
            # whether this file is run directly or imported by a WSGI server
+init_canteen_tables()  # create canteen tables and seed sample data
 
 if __name__ == "__main__":
     # debug=True enables Werkzeug's interactive debugger, which can execute

@@ -38,9 +38,9 @@
         <p class="tagline-dark">Sign in to access your dashboard.</p>
         <form id="login-form" class="stack">
           <label for="login-name">Email or Roll Number</label>
-          <input id="login-name" type="text" placeholder="Your email or roll number" required>
+          <input id="login-name" type="text" autocomplete="username" placeholder="Your email or roll number" required>
           <label for="login-password">Password</label>
-          <div class="password-input"><input id="login-password" type="password" placeholder="Enter your password" required><button type="button" class="password-toggle" data-target="login-password" aria-label="Show password">&#128065;</button></div>
+          <div class="password-input"><input id="login-password" type="password" autocomplete="current-password" placeholder="Enter your password" required><button type="button" class="password-toggle" data-target="login-password" aria-label="Show password"></button></div>
           <button type="submit" class="primary">Sign In</button>
         </form>
         <p id="login-error" class="error-text hidden"></p>
@@ -56,9 +56,9 @@
         <p class="tagline-dark">Sign in to manage your campus.</p>
         <form id="admin-inline-login-form" class="stack">
           <label for="admin-inline-email">Admin email</label>
-          <input id="admin-inline-email" type="email" placeholder="admin@college.edu" required>
+          <input id="admin-inline-email" type="email" autocomplete="username" placeholder="admin@college.edu" required>
           <label for="admin-inline-password">Password</label>
-          <div class="password-input"><input id="admin-inline-password" type="password" placeholder="Enter your password" required><button type="button" class="password-toggle" data-target="admin-inline-password" aria-label="Show password">&#128065;</button></div>
+          <div class="password-input"><input id="admin-inline-password" type="password" autocomplete="current-password" placeholder="Enter your password" required><button type="button" class="password-toggle" data-target="admin-inline-password" aria-label="Show password"></button></div>
           <button type="submit" class="primary">Sign In</button>
         </form>
         <p id="admin-inline-login-error" class="error-text hidden"></p>
@@ -72,16 +72,16 @@
       <p class="tagline-dark">Use your official college details.</p>
       <form id="register-form" class="stack">
         <label for="register-name">Full name</label>
-        <input id="register-name" type="text" placeholder="Your full name" required>
+        <input id="register-name" type="text" autocomplete="off" placeholder="Your full name" required>
         <label for="register-roll">Roll number</label>
-        <input id="register-roll" type="text" placeholder="e.g. 22CSE101" required>
+        <input id="register-roll" type="text" autocomplete="off" placeholder="e.g. 22CSE101" required>
         <label for="register-email">College email</label>
-        <input id="register-email" type="email" placeholder="you@college.edu" required>
+        <input id="register-email" type="email" autocomplete="off" placeholder="you@college.edu" required>
         <label for="register-password">Password</label>
-        <div class="password-input"><input id="register-password" type="password" placeholder="At least 8 characters" required minlength="8"><button type="button" class="password-toggle" data-target="register-password" aria-label="Show password">&#128065;</button></div>
+        <div class="password-input"><input id="register-password" type="password" autocomplete="new-password" placeholder="At least 8 characters" required minlength="8"><button type="button" class="password-toggle" data-target="register-password" aria-label="Show password"></button></div>
         <div class="password-strength"><div class="strength-track"><div id="register-strength-bar" class="strength-bar"></div></div><span id="register-strength-label">Use 8+ characters</span></div>
         <label for="register-confirm-password">Confirm password</label>
-        <div class="password-input"><input id="register-confirm-password" type="password" placeholder="Repeat your password" required minlength="8"><button type="button" class="password-toggle" data-target="register-confirm-password" aria-label="Show password">&#128065;</button></div>
+        <div class="password-input"><input id="register-confirm-password" type="password" autocomplete="new-password" placeholder="Repeat your password" required minlength="8"><button type="button" class="password-toggle" data-target="register-confirm-password" aria-label="Show password"></button></div>
         <p id="register-password-error" class="field-error hidden"></p>
         <button type="submit" class="primary">Create Account</button>
       </form>
@@ -118,10 +118,10 @@
         <input id="reset-code" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="000000" required>
         <p class="auth-switch"><a href="#" id="resend-reset-link">Resend code</a></p>
         <label for="reset-password">Step 3: New password</label>
-        <div class="password-input"><input id="reset-password" type="password" placeholder="At least 8 characters" required minlength="8"><button type="button" class="password-toggle" data-target="reset-password" aria-label="Show password">&#128065;</button></div>
+        <div class="password-input"><input id="reset-password" type="password" placeholder="At least 8 characters" required minlength="8"><button type="button" class="password-toggle" data-target="reset-password" aria-label="Show password"></button></div>
         <div class="password-strength"><div class="strength-track"><div id="reset-strength-bar" class="strength-bar"></div></div><span id="reset-strength-label">Use 8+ characters</span></div>
         <label for="reset-confirm-password">Confirm new password</label>
-        <div class="password-input"><input id="reset-confirm-password" type="password" placeholder="Repeat your password" required minlength="8"><button type="button" class="password-toggle" data-target="reset-confirm-password" aria-label="Show password">&#128065;</button></div>
+        <div class="password-input"><input id="reset-confirm-password" type="password" placeholder="Repeat your password" required minlength="8"><button type="button" class="password-toggle" data-target="reset-confirm-password" aria-label="Show password"></button></div>
         <p id="reset-password-error" class="field-error hidden"></p>
         <button type="submit" class="primary">Reset Password</button>
       </form>
@@ -129,15 +129,6 @@
       <p class="auth-switch"><a href="#" id="show-reset-login-link">Remember your password? Back to Login</a></p>
     </div>
     </div>
-  </div>
-  <div class="auth-visual" aria-hidden="true">
-    <div class="visual-grid"></div>
-    <div class="visual-window">
-      <div class="visual-window-bar"><span></span><span></span><span></span></div>
-      <img src="{{ url_for('static', filename='campus_map.jpg') }}" alt="">
-      <div class="visual-pin">+</div>
-    </div>
-    <div class="visual-label">ONE CAMPUS<br><strong>ONE PLATFORM</strong></div>
   </div>
   <footer class="auth-footer">© 2026 College Portal <span>|</span> <a href="#">Privacy Policy</a> <span>|</span> <a href="/admin/login">Admin Portal</a></footer>
 </section>
@@ -174,6 +165,10 @@
           <span class="nav-icon" aria-hidden="true">▣</span>
           <span>Campus Map</span>
         </button>
+        <a class="nav-item" href="/canteen" style="text-decoration:none;color:inherit">
+          <span class="nav-icon" aria-hidden="true">🍔</span>
+          <span>Smart Canteen</span>
+        </a>
         <button class="nav-item" type="button" data-target="notifications">
           <span class="nav-icon" aria-hidden="true">◌</span>
           <span>Notifications</span>
@@ -200,7 +195,7 @@
       <header class="dashboard-header">
         <div class="header-copy">
           <p class="eyebrow-small">Student workspace</p>
-          <h1 id="hello-heading">Good Morning, Student 👋</h1>
+          <h1 id="hello-heading">Good Morning, Student</h1>
           <p class="header-subtitle">Here's what's happening around your campus today.</p>
         </div>
 
@@ -308,7 +303,33 @@
                 <p class="stat-caption">Questions asked</p>
                 <span class="status-pill status-success">Ready</span>
               </article>
+
+              <article class="card stat-card" style="cursor:pointer;border-color:var(--primary)" id="canteen-dashboard-card">
+                <div class="stat-header">
+                  <div>
+                    <p class="section-kicker">Smart Canteen</p>
+                    <h3>🍔</h3>
+                  </div>
+                  <span class="stat-icon primary" style="font-size:1.6rem">🍴</span>
+                </div>
+                <p class="stat-caption">Pre-order food, skip the queue and collect at your selected time.</p>
+                <a href="/canteen" style="text-decoration:none">
+                  <span class="status-pill status-success" style="cursor:pointer">Explore Canteens →</span>
+                </a>
+              </article>
             </div>
+
+            <article class="card dashboard-orders-card" id="my-orders-dashboard-card">
+              <div class="stat-header">
+                <div>
+                  <p class="section-kicker">📦 My Orders</p>
+                  <h3>Track your canteen orders</h3>
+                </div>
+                <span class="stat-icon primary">📦</span>
+              </div>
+              <p class="stat-caption">Pickup time, kitchen status, bill and QR — for your orders only.</p>
+              <a href="/canteen?view=orders" class="orders-card-link">View Orders →</a>
+            </article>
           </section>
 
           <section id="tab-assistant" class="panel-section">

@@ -153,7 +153,7 @@
     const displayName = user.name || "Student";
     const firstName = displayName.split(" ")[0] || "Student";
     if (currentUserLabel) currentUserLabel.textContent = `${displayName} (${user.roll_number || "Student"})`;
-    if (helloHeading) helloHeading.textContent = `Good Morning, ${firstName} 👋`;
+    if (helloHeading) helloHeading.textContent = `Good Morning, ${firstName}`;
     if (profileName) profileName.textContent = displayName;
     if (profileRoll) profileRoll.textContent = user.roll_number || "Student";
     if (profileEmail) profileEmail.textContent = user.college_email || "—";
@@ -179,6 +179,25 @@
 
     if (loginScreen) loginScreen.classList.remove("hidden");
     if (appShell) appShell.classList.add("hidden");
+    
+    // Ensure forms are cleared before showing login screen
+    resetAuthForms();
+  }
+  
+  function resetAuthForms() {
+    // Reset all form elements to ensure no previous user's data is visible
+    ["login-form", "admin-inline-login-form", "register-form"].forEach((id) => {
+      const form = document.getElementById(id);
+      if (form) {
+        form.reset();
+        // Explicitly clear all input values to handle cases where reset() alone isn't sufficient
+        form.querySelectorAll("input, textarea").forEach((input) => {
+          input.value = "";
+        });
+      }
+    });
+    // Clear all error messages
+    document.querySelectorAll("#login-screen .error-text, #login-screen .field-error").forEach(hideError);
   }
 
   function attachAuthHandlers() {
@@ -332,9 +351,10 @@
       switchAuthView("login");
     });
 
-    const switchUserBtn = document.getElementById("switch-user-btn");
+     const switchUserBtn = document.getElementById("switch-user-btn");
     switchUserBtn?.addEventListener("click", async () => {
       await fetch("/api/logout", { method: "POST" });
+      resetAuthForms();
       window.location.reload();
     });
   }
@@ -354,8 +374,17 @@
   function attachNavigationHandlers() {
     document.querySelectorAll(".nav-item").forEach((button) => {
       button.addEventListener("click", () => {
-        if (button.dataset.action === "logout") {
-          fetch("/api/logout", { method: "POST" }).finally(() => window.location.reload());
+              if (button.dataset.action === "logout") {
+          fetch("/api/logout", { method: "POST" }).finally(() => {
+            // Clear authentication state and forms
+            resetAuthForms();
+            // Preserve theme preference on logout
+            const savedTheme = localStorage.getItem("campuscopilot_theme");
+            // Clear session state
+            sessionStorage.clear();
+            // Reload to return to login page with preserved theme
+            window.location.reload();
+          });
           return;
         }
 
@@ -663,10 +692,11 @@
 
       const status = document.getElementById("map-locate-status");
       if (status) {
-        status.textContent = "Finding your location...";
+        status.textContent = "Requesting location permission...";
         status.classList.remove("hidden");
       }
 
+      // Request location with proper permission handling
       navigator.geolocation.getCurrentPosition(
         (position) => {
           const { latitude, longitude, accuracy } = position.coords;
@@ -697,14 +727,23 @@
             status.style.color = "";
           }
         },
-        () => {
+        (error) => {
           if (status) {
-            status.textContent = "Couldn't get your location - make sure location access is allowed for this site in your browser settings.";
             status.classList.remove("hidden");
             status.style.color = "var(--danger)";
+            
+            if (error.code === error.PERMISSION_DENIED) {
+              status.textContent = "Location permission is required for this feature. Please allow location access in your browser settings.";
+            } else if (error.code === error.POSITION_UNAVAILABLE) {
+              status.textContent = "Location information is unavailable. Please try again or allow location access.";
+            } else if (error.code === error.TIMEOUT) {
+              status.textContent = "Location request timed out. Please try again.";
+            } else {
+              status.textContent = "Couldn't get your location - make sure location access is allowed for this site in your browser settings.";
+            }
           }
         },
-        { enableHighAccuracy: true, timeout: 10000 }
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       );
     });
 
@@ -772,6 +811,7 @@
   }
 
   function initialize() {
+    resetAuthForms();
     attachAuthHandlers();
     attachNavigationHandlers();
     attachAssistantHandlers();
@@ -782,6 +822,12 @@
     applyAiCounter();
     checkLoginStatus();
   }
+
+  window.addEventListener("pageshow", (event) => {
+    // Firefox/Safari can restore old form values from the back/forward cache;
+    // clear them so a previous user's email/password never reappears.
+    if (event.persisted) resetAuthForms();
+  });
 
   function openPanel(targetId) {
     const normalized = targetId || "dashboard";

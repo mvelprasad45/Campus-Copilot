@@ -24,17 +24,30 @@
   // Logout & Switch User
   document.querySelector(".nav-item-logout").addEventListener("click", async () => {
     await fetch("/api/admin/logout", { method: "POST" });
+    // Preserve theme preference when logging out
+    const savedTheme = localStorage.getItem("campuscopilot_theme");
+    // Clear any session state
+    sessionStorage.clear();
+    // Redirect to admin login with preserved theme
     location.href = "/admin/login";
   });
   
   document.getElementById("switch-user-btn").addEventListener("click", () => {
-      location.href = "/student/login";
+      // Preserve theme when switching to student view
+      location.href = "/";
   });
 
   function escapeHtml(str) {
     const div = document.createElement("div");
     div.textContent = str ?? "";
     return div.innerHTML;
+  }
+
+  // There is exactly one admin account for the whole college, so the
+  // user-facing label is always the same - the internal admin_id / role
+  // slug from the database are still used for auth checks, just not shown.
+  function friendlyAdminRole(role) {
+    return role === "super_admin" ? "Super Administrator" : "College Administrator";
   }
 
   // --- Profile Load ---
@@ -45,18 +58,17 @@
         return;
     }
     const admin = await res.json();
-    document.getElementById("profile-name").textContent = admin.name || "Admin";
-    document.getElementById("profile-admin-id").textContent = admin.admin_id || "ADMIN";
+    const roleLabel = friendlyAdminRole(admin.role);
+    document.getElementById("profile-name").textContent = "Admin";
+    document.getElementById("profile-admin-id").textContent = roleLabel;
     document.getElementById("profile-email").textContent = admin.email || "";
-    document.getElementById("profile-role").textContent = admin.role || "";
+    document.getElementById("profile-role").textContent = roleLabel;
     document.getElementById("profile-status").textContent = admin.status || "Active";
-    document.getElementById("current-user-label").textContent = (admin.name || "Admin").split(" ")[0];
-    document.getElementById("hello-heading").textContent = `Good Morning, ${admin.name || "Admin"} 👋`;
-    
-    if (admin.name) {
-        document.getElementById("profile-avatar").textContent = admin.name.charAt(0).toUpperCase();
-        document.querySelector(".header-actions .profile-avatar").textContent = admin.name.charAt(0).toUpperCase();
-    }
+    document.getElementById("current-user-label").textContent = "Admin";
+    document.getElementById("hello-heading").textContent = `Good Morning, Admin`;
+
+    document.getElementById("profile-avatar").textContent = "A";
+    document.querySelector(".header-actions .profile-avatar").textContent = "A";
   }
 
   // --- Dashboard Stats ---
