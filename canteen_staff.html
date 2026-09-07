@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart Canteen Staff – Campus Copilot</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="stylesheet" href="/static/canteen.css" />
+</head>
+<body>
+  <!-- Header -->
+  <header class="app-header">
+    <h1>Canteen Staff Dashboard</h1>
+    <div class="user-info">
+      <span id="staff-user-label">Staff</span>
+      <button id="staff-logout-btn" class="pill-button">Logout</button>
+    </div>
+  </header>
+
+  <main class="canteen-main">
+    <nav class="staff-tabs">
+      <button class="staff-tab active" id="staff-tab-orders">Orders</button>
+      <button class="staff-tab" id="staff-tab-menu">Menu</button>
+      <button class="staff-tab" id="staff-tab-analytics">Analytics</button>
+    </nav>
+
+    <section class="staff-content" data-staff-target="orders">
+      <header class="staff-header">
+        <h2>Today's Orders</h2>
+        <button id="staff-refresh-btn" class="pill-button">Refresh</button>
+      </header>
+      <div id="staff-stats-row" class="stats-row"></div>
+      <div id="staff-orders-container" class="orders-container"></div>
+    </section>
+
+    <section class="staff-content hidden" data-staff-target="menu">
+      <header class="staff-header">
+        <h2>Menu Management</h2>
+        <button id="add-menu-item-btn" class="pill-button">+ Add Item</button>
+      </header>
+      <div id="staff-menu-list" class="menu-list"></div>
+      <div id="menu-item-form-wrap" class="modal hidden">
+        <div class="modal-content">
+          <h3 id="menu-form-title">Add Food Item</h3>
+          <form id="menu-item-form">
+            <input type="hidden" id="menu-item-id" />
+            <label>Name <input type="text" id="mf-name" required /></label>
+            <label>Price <input type="number" step="0.01" id="mf-price" required /></label>
+            <label>Category <input type="text" id="mf-category" /></label>
+            <label>Available <select id="mf-available"><option value="true" selected>Yes</option><option value="false">No</option></select></label>
+            <label>Description <textarea id="mf-description"></textarea></label>
+            <div class="modal-actions">
+              <button type="button" id="menu-form-cancel" class="pill-button">Cancel</button>
+              <button type="submit" id="menu-form-submit" class="pill-button">Save Item</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <section class="staff-content hidden" data-staff-target="analytics">
+      <header class="staff-header">
+        <h2>Analytics</h2>
+        <button id="refresh-analytics-btn" class="pill-button">Refresh</button>
+      </header>
+      <div id="analytics-stats-row" class="stats-row"></div>
+      <h3>Top Items</h3>
+      <div id="analytics-top-items" class="analytics-bar"></div>
+      <h3>Orders by Slot</h3>
+      <div id="analytics-by-slot" class="analytics-bar"></div>
+      <h3>Demand Insight (AI)</h3>
+      <div id="analytics-demand-insight" class="demand-insight"></div>
+    </section>
+
+    <!-- Order Detail Modal -->
+    <div id="order-modal" class="modal hidden">
+      <div class="modal-content" id="modal-content">
+        <h3 id="modal-order-title">Order Details</h3>
+        <div id="modal-content-body"></div>
+        <div id="modal-actions" class="modal-actions"></div>
+        <button id="close-modal-btn" class="pill-button">Close</button>
+      </div>
+    </div>
+  </main>
+
+  <script src="/static/canteen_staff.js"></script>
+</body>
+</html>
