@@ -302,20 +302,36 @@ def init_db():
             )
             
             buildings_data = [
-                ("Admin Block", "11.0210", "76.9567"),
-                ("Classroom Block 1", "11.0213", "76.9570"),
-                ("Classroom Block 2", "11.0217", "76.9572"),
-                ("Classroom Block 3", "11.0221", "76.9574"),
+                ("Bike Parking", "10.937065992407732", "76.95419069860179"),
+                ("Staff Bike Parking", "10.937860824395427", "76.95474712688755"),
+                ("MCA Block", "10.937250001145884", "76.95593397447838"),
+                ("Classroom Block 1", "10.937227259023842", "76.95625770510364"),
+                ("Classroom Block 2", "10.937224552397229", "76.95664122070211"),
+                ("Classroom Block 3", "10.936770620677912", "76.95580808784263"),
+                ("Classroom Block 4", "10.936348645238558", "76.95581590335559"),
+                ("Classroom Block 5", "10.93712519394808", "76.9554218524556"),
+                ("Classroom Block 6", "10.93675780726599", "76.95523532978821"),
+                ("Classroom Block ECE", "10.9367271995425", "76.9562472986592"),
+                ("Classroom Block EEE", "10.93636172237288", "76.95623213542355"),
+                ("SKCET Stadium", "10.93720512733253", "76.95751806013921"),
+                ("Admin Block", "10.937877896310905", "76.95634224673121"),
+                ("Venkatram Learning Center", "10.938605849328804", "76.95614845441831"),
+                ("Conventional Hall", "10.938385872380232", "76.95670636519277"),
+                ("Food Court", "10.938855061181442", "76.95663446788484"),
+                ("SKCET Hall", "10.938940413455155", "76.95906197789171"),
                 ("CS Block", "11.0208", "76.9573"),
                 ("ECE Block", "11.0211", "76.9580"),
                 ("Mechanical Block", "11.0205", "76.9583"),
-                ("Venkatram Learning Center", "11.0215", "76.9575"),
-                ("Food Court", "11.0220", "76.9560"),
-                ("SKCET Hall", "11.0205", "76.9580"),
             ]
             for name, lat, lon in buildings_data:
                 cur.execute(
-                    "INSERT INTO buildings (name, latitude, longitude) VALUES (%s, %s, %s) ON CONFLICT (name) DO NOTHING",
+                    """
+                    INSERT INTO buildings (name, latitude, longitude)
+                    VALUES (%s, %s, %s)
+                    ON CONFLICT (name) DO UPDATE SET
+                        latitude = EXCLUDED.latitude,
+                        longitude = EXCLUDED.longitude
+                    """,
                     (name, lat, lon)
                 )
 

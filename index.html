@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Campus Copilot</title>
 <script src="{{ url_for('static', filename='theme.js') }}"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
@@ -437,7 +438,7 @@
                   <p class="section-kicker">Campus navigation</p>
                   <h2>Explore Campus</h2>
                 </div>
-                <button class="pill-button" type="button">Open Full Map</button>
+                <button id="open-full-map-btn" class="pill-button" type="button">Open Full Map</button>
               </div>
 
               <div class="map-toolbar">
@@ -455,10 +456,9 @@
 
               <p id="map-locate-status" class="map-hint hidden"></p>
 
-              <div id="map-container" class="map-container">
-                <img id="campus-map-img" src="{{ url_for('static', filename='campus_map.jpg') }}" alt="Campus map preview">
-                <svg id="map-svg" class="map-svg" aria-label="Campus walking route"></svg>
-                <div id="map-pins"></div>
+              <div id="map-container" class="map-container" aria-label="Interactive GPS map of SKCET campus">
+                <div id="campus-map"></div>
+                <div id="map-pins" aria-hidden="true"></div>
               </div>
 
               <div id="map-info-box" class="map-info-box hidden"></div>
@@ -626,6 +626,7 @@
     </div>
   </div>
 
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="{{ url_for('static', filename='script.js') }}"></script>
 </div>
 </body>

@@ -897,6 +897,215 @@
     });
   }
 
+  async function initializeLeafletMap() {
+    const mapElement = document.getElementById("campus-map");
+    const toSelect = document.getElementById("map-to");
+    const manualLocationButton = document.getElementById("map-manual-location-btn");
+    const manualLocationSelect = document.getElementById("map-manual-location");
+    if (!mapElement || !toSelect || mapElement.dataset.initialized) return;
+    if (!window.L) {
+      mapElement.innerHTML = '<div class="map-load-error">The live map could not load. Check your internet connection and refresh the page.</div>';
+      return;
+    }
+
+    mapElement.dataset.initialized = "true";
+    const campusCenter = [10.9378, 76.9564];
+    const map = L.map(mapElement, { zoomControl: true }).setView(campusCenter, 17);
+    window.campusLeafletMap = map;
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 20,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    }).addTo(map);
+    const mapContainer = document.getElementById("map-container");
+    const resizeMap = () => map.invalidateSize({ pan: false });
+    if (mapContainer && "ResizeObserver" in window) {
+      new ResizeObserver(resizeMap).observe(mapContainer);
+    }
+    const fullMapButton = document.getElementById("open-full-map-btn");
+    fullMapButton?.addEventListener("click", () => {
+      const expanded = mapContainer?.classList.toggle("is-expanded") || false;
+      document.body.classList.toggle("map-expanded", expanded);
+      fullMapButton.textContent = expanded ? "Close Full Map" : "Open Full Map";
+      fullMapButton.setAttribute("aria-expanded", String(expanded));
+      window.setTimeout(resizeMap, 120);
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape" || !mapContainer?.classList.contains("is-expanded")) return;
+      mapContainer.classList.remove("is-expanded");
+      document.body.classList.remove("map-expanded");
+      fullMapButton.textContent = "Open Full Map";
+      fullMapButton.setAttribute("aria-expanded", "false");
+      window.setTimeout(resizeMap, 120);
+    });
+
+    const locations = [
+      { id: "entrance", name: "Main Entrance", latitude: 10.9371, longitude: 76.9538, info: "Main gate and entry road onto campus." },
+      { id: "venkatram", name: "Venkatram Learning Center", latitude: 10.938605849328804, longitude: 76.95614845441831, info: "Learning center building." },
+      { id: "foodcourt", name: "Food Court", latitude: 10.938855061181442, longitude: 76.95663446788484, info: "Campus food court." },
+      { id: "admin", name: "Admin Block", latitude: 10.937877896310905, longitude: 76.95634224673121, info: "Administrative offices." },
+      { id: "stadium", name: "SKCET Stadium", latitude: 10.93720512733253, longitude: 76.95751806013921, info: "Running track and sports ground." },
+      { id: "carparking", name: "Car Parking", latitude: 10.9370, longitude: 76.9585, info: "Car parking area." },
+      { id: "hall", name: "SKCET Hall", latitude: 10.938940413455155, longitude: 76.95906197789171, info: "Main hall / auditorium building." },
+      { id: "bikeparking", name: "Bike Parking", latitude: 10.937065992407732, longitude: 76.95419069860179, info: "Bike / two-wheeler parking area." },
+    ];
+
+    try {
+      const response = await fetch("/api/buildings");
+      if (response.ok) {
+        const buildingsByName = new Map((await response.json()).map((building) => [building.name, building]));
+        locations.forEach((location) => {
+          const building = buildingsByName.get(location.name);
+          if (building) {
+            location.latitude = Number(building.latitude);
+            location.longitude = Number(building.longitude);
+          }
+        });
+      }
+    } catch (error) {
+      console.warn("Using built-in SKCET map coordinates:", error);
+    }
+    const mapAnchor = locations.find((location) => location.id === "admin") || locations[0];
+    map.setView([mapAnchor.latitude, mapAnchor.longitude], 17);
+
+    const markers = new Map();
+    locations.forEach((location) => {
+      const marker = L.circleMarker([location.latitude, location.longitude], {
+        radius: 8, color: "#ffffff", weight: 3, fillColor: "#159a8c", fillOpacity: 1,
+      }).addTo(map);
+      marker.bindPopup(`<strong>${location.name}</strong><br>${location.info}`);
+      markers.set(location.id, marker);
+
+      const option = document.createElement("option");
+      option.value = location.id;
+      option.textContent = location.name;
+      option.dataset.latitude = String(location.latitude);
+      option.dataset.longitude = String(location.longitude);
+      toSelect.appendChild(option);
+      const manualOption = option.cloneNode(true);
+      manualOption.textContent = location.name;
+      manualLocationSelect?.appendChild(manualOption);
+    });
+
+    let gpsLocation = null;
+    let manualLocation = null;
+    let routeLine = null;
+    let currentLocationMarker = null;
+    const status = document.getElementById("map-locate-status");
+    const infoBox = document.getElementById("map-info-box");
+    const showStatus = (message, isError = false) => {
+      if (!status) return;
+      status.textContent = message;
+      status.classList.remove("hidden");
+      status.style.color = isError ? "var(--danger)" : "";
+    };
+
+    manualLocationButton?.addEventListener("click", () => {
+      manualLocationSelect?.classList.toggle("hidden");
+      manualLocationSelect?.focus();
+    });
+
+    manualLocationSelect?.addEventListener("change", () => {
+      const selected = manualLocationSelect.options[manualLocationSelect.selectedIndex];
+      const latitude = Number(selected?.dataset.latitude);
+      const longitude = Number(selected?.dataset.longitude);
+      if (!selected?.value || !Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+      manualLocation = { latitude, longitude, name: selected.textContent };
+      currentLocationMarker?.remove();
+      currentLocationMarker = L.circleMarker([latitude, longitude], {
+        radius: 9, color: "#ffffff", weight: 3, fillColor: "#f59e0b", fillOpacity: 1,
+      }).addTo(map).bindPopup(`<strong>Manual location</strong><br>${selected.textContent}`);
+      map.flyTo([latitude, longitude], 18);
+      showStatus(`Manually set location at ${selected.textContent}.`);
+    });
+
+    toSelect.addEventListener("change", () => {
+      const location = locations.find((item) => item.id === toSelect.value);
+      if (!location || !infoBox) return;
+      infoBox.innerHTML = `<strong>${location.name}</strong><p>${location.info}</p><p>GPS destination: ${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}</p>`;
+      infoBox.classList.remove("hidden");
+      markers.get(location.id)?.openPopup();
+    });
+
+    document.getElementById("map-locate-btn")?.addEventListener("click", () => {
+      if (!navigator.geolocation) {
+        showStatus("Your browser does not support GPS location.", true);
+        return;
+      }
+      showStatus("Requesting GPS location permission...");
+      navigator.geolocation.getCurrentPosition((position) => {
+        const { latitude, longitude, accuracy } = position.coords;
+        gpsLocation = { latitude, longitude, name: "Your live GPS location" };
+        currentLocationMarker?.remove();
+        currentLocationMarker = L.circleMarker([latitude, longitude], {
+          radius: 9, color: "#ffffff", weight: 3, fillColor: "#2563eb", fillOpacity: 1,
+        }).addTo(map).bindPopup("<strong>Your live GPS location</strong>");
+        map.flyTo([latitude, longitude], 18);
+        showStatus(`Location found (accuracy: ~${Math.round(accuracy)}m). Pick a destination.`);
+      }, () => showStatus("Could not get your GPS location. Allow location access and try again.", true), {
+        enableHighAccuracy: true, timeout: 10000, maximumAge: 0,
+      });
+    });
+
+    document.getElementById("map-show-path")?.addEventListener("click", async () => {
+      const start = manualLocation || gpsLocation;
+      const destination = locations.find((location) => location.id === toSelect.value);
+      if (!start) {
+        showStatus('Tap "Where Am I?" first or set your location manually.', true);
+        return;
+      }
+      if (!destination) {
+        showStatus("Pick a destination from the dropdown.", true);
+        return;
+      }
+      showStatus("Finding a route along campus roads...");
+      routeLine?.remove();
+      try {
+        const routeUrl = `https://routing.openstreetmap.de/routed-foot/route/v1/driving/${start.longitude},${start.latitude};${destination.longitude},${destination.latitude}?overview=full&geometries=geojson&alternatives=true&steps=true`;
+        const response = await fetch(routeUrl);
+        const routeData = await response.json();
+        if (!response.ok || routeData.code !== "Ok" || !routeData.routes?.length) {
+          throw new Error("No road route found");
+        }
+
+        const route = routeData.routes
+          .filter((candidate) => candidate.geometry && Number.isFinite(candidate.distance))
+          .sort((first, second) => first.distance - second.distance)[0];
+        if (!route) throw new Error("No usable road route found");
+        routeLine = L.geoJSON(route.geometry, {
+          style: { color: "#f59e0b", weight: 6, opacity: 0.95 },
+        }).addTo(map);
+        map.fitBounds(routeLine.getBounds(), { padding: [48, 48] });
+        showStatus(`Shortest walking route found to ${destination.name}.`);
+        if (infoBox) {
+          infoBox.innerHTML = `<strong>You → ${destination.name}</strong><p>GPS destination: ${destination.latitude.toFixed(5)}, ${destination.longitude.toFixed(5)}</p><p>Walking distance: ${(route.distance / 1000).toFixed(2)} km</p><p>Follow the highlighted campus walking path.</p>`;
+          infoBox.classList.remove("hidden");
+        }
+      } catch (error) {
+        console.error("Unable to load road route:", error);
+        showStatus("A road route could not be loaded. Check your internet connection and try again.", true);
+      }
+    });
+
+    document.getElementById("map-clear-path")?.addEventListener("click", () => {
+      routeLine?.remove();
+      currentLocationMarker?.remove();
+      currentLocationMarker = null;
+      gpsLocation = null;
+      manualLocation = null;
+      toSelect.value = "";
+      if (manualLocationSelect) manualLocationSelect.value = "";
+      infoBox?.classList.add("hidden");
+      status?.classList.add("hidden");
+      map.setView(campusCenter, 17);
+    });
+
+    const refreshMapSize = () => window.setTimeout(resizeMap, 80);
+    document.querySelectorAll('[data-target="map"]').forEach((control) => {
+      control.addEventListener("click", refreshMapSize);
+    });
+    window.setTimeout(refreshMapSize, 100);
+  }
+
   function calculateDistanceKm(startLatitude, startLongitude, endLatitude, endLongitude) {
     const earthRadiusKm = 6371;
     const toRadians = (degrees) => degrees * Math.PI / 180;
@@ -1005,7 +1214,7 @@
     attachAssistantHandlers();
     attachLostFoundHandlers();
     attachLocationLookupHandlers();
-    initializeMap();
+    initializeLeafletMap();
     openPanel("dashboard");
     refreshDashboardData();
     applyAiCounter();
@@ -1028,6 +1237,9 @@
       const sectionTarget = section.id.replace(/^tab-/, "");
       section.classList.toggle("active", sectionTarget === normalized);
     });
+    if (normalized === "map" && window.campusLeafletMap) {
+      window.setTimeout(() => window.campusLeafletMap.invalidateSize({ pan: false }), 120);
+    }
   }
 
   initialize();
