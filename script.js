@@ -823,6 +823,8 @@
     checkLoginStatus();
   }
 
+  window.addEventListener("load", resetAuthForms);
+
   window.addEventListener("pageshow", (event) => {
     // Firefox/Safari can restore old form values from the back/forward cache;
     // clear them so a previous user's email/password never reappears.

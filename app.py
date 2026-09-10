@@ -167,6 +167,9 @@ def get_db():
     return psycopg2.connect(
         DATABASE_URL,
         cursor_factory=psycopg2.extras.RealDictCursor,
+        keepalives=1,
+        keepalives_idle=30,
+        connect_timeout=10,
     )
 
 
