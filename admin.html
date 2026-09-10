@@ -76,10 +76,13 @@
         </div>
 
         <div class="header-actions">
-          <button class="ghost-button icon-button" type="button" aria-label="Search">
+          <div id="global-search-panel" class="header-search-panel hidden">
+            <input id="global-search-input" type="search" placeholder="Search campus..." aria-label="Search campus content" />
+          </div>
+          <button id="global-search-btn" class="ghost-button icon-button" type="button" aria-label="Search">
             <span aria-hidden="true">⌕</span>
           </button>
-          <button class="ghost-button icon-button" type="button" aria-label="Notifications">
+          <button id="global-notifications-btn" class="ghost-button icon-button" type="button" aria-label="Notifications">
             <span aria-hidden="true">🔔</span>
             <span class="notification-dot" aria-hidden="true"></span>
           </button>
@@ -276,6 +279,19 @@
               </form>
 
               <div id="admin-announcements-list" class="stack-list"></div>
+            </div>
+          </section>
+
+          <!-- NOTIFICATIONS TAB -->
+          <section id="tab-notifications" class="panel-section">
+            <div class="card panel-card">
+              <div class="section-header">
+                <div>
+                  <p class="section-kicker">Updates</p>
+                  <h2>Notifications</h2>
+                </div>
+              </div>
+              <div id="notification-list" class="timeline-list"></div>
             </div>
           </section>
 

@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Campus Copilot</title>
 <script src="{{ url_for('static', filename='theme.js') }}"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
@@ -40,7 +41,7 @@
           <label for="login-name">Enter the name of the student</label>
           <input id="login-name" type="text" autocomplete="new-password" placeholder="Your email or roll number" required>
           <label for="login-password">Password</label>
-          <div class="password-input"><input id="login-password" type="password" autocomplete="current-password" placeholder="Enter your password" required><button type="button" class="password-toggle" data-target="login-password" aria-label="Show password"></button></div>
+          <div class="password-input"><input id="login-password" type="password" autocomplete="current-password" placeholder="Enter your password" required><button type="button" class="password-toggle" data-target="login-password" aria-label="Show password">Show</button></div>
           <button type="submit" class="primary">Sign In</button>
         </form>
         <p id="login-error" class="error-text hidden"></p>
@@ -58,7 +59,7 @@
           <label for="admin-inline-email">Admin email</label>
           <input id="admin-inline-email" type="email" autocomplete="username" placeholder="admin@college.edu" required>
           <label for="admin-inline-password">Password</label>
-          <div class="password-input"><input id="admin-inline-password" type="password" autocomplete="current-password" placeholder="Enter your password" required><button type="button" class="password-toggle" data-target="admin-inline-password" aria-label="Show password"></button></div>
+          <div class="password-input"><input id="admin-inline-password" type="password" autocomplete="current-password" placeholder="Enter your password" required><button type="button" class="password-toggle" data-target="admin-inline-password" aria-label="Show password">Show</button></div>
           <button type="submit" class="primary">Sign In</button>
         </form>
         <p id="admin-inline-login-error" class="error-text hidden"></p>
@@ -78,10 +79,10 @@
         <label for="register-email">College email</label>
         <input id="register-email" type="email" autocomplete="off" placeholder="you@college.edu" required>
         <label for="register-password">Password</label>
-        <div class="password-input"><input id="register-password" type="password" autocomplete="new-password" placeholder="At least 8 characters" required minlength="8"><button type="button" class="password-toggle" data-target="register-password" aria-label="Show password"></button></div>
+        <div class="password-input"><input id="register-password" type="password" autocomplete="new-password" placeholder="At least 8 characters" required minlength="8"><button type="button" class="password-toggle" data-target="register-password" aria-label="Show password">Show</button></div>
         <div class="password-strength"><div class="strength-track"><div id="register-strength-bar" class="strength-bar"></div></div><span id="register-strength-label">Use 8+ characters</span></div>
         <label for="register-confirm-password">Confirm password</label>
-        <div class="password-input"><input id="register-confirm-password" type="password" autocomplete="new-password" placeholder="Repeat your password" required minlength="8"><button type="button" class="password-toggle" data-target="register-confirm-password" aria-label="Show password"></button></div>
+        <div class="password-input"><input id="register-confirm-password" type="password" autocomplete="new-password" placeholder="Repeat your password" required minlength="8"><button type="button" class="password-toggle" data-target="register-confirm-password" aria-label="Show password">Show</button></div>
         <p id="register-password-error" class="field-error hidden"></p>
         <button type="submit" class="primary">Create Account</button>
       </form>
@@ -118,10 +119,10 @@
         <input id="reset-code" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="000000" required>
         <p class="auth-switch"><a href="#" id="resend-reset-link">Resend code</a></p>
         <label for="reset-password">Step 3: New password</label>
-        <div class="password-input"><input id="reset-password" type="password" placeholder="At least 8 characters" required minlength="8"><button type="button" class="password-toggle" data-target="reset-password" aria-label="Show password"></button></div>
+        <div class="password-input"><input id="reset-password" type="password" placeholder="At least 8 characters" required minlength="8"><button type="button" class="password-toggle" data-target="reset-password" aria-label="Show password">Show</button></div>
         <div class="password-strength"><div class="strength-track"><div id="reset-strength-bar" class="strength-bar"></div></div><span id="reset-strength-label">Use 8+ characters</span></div>
         <label for="reset-confirm-password">Confirm new password</label>
-        <div class="password-input"><input id="reset-confirm-password" type="password" placeholder="Repeat your password" required minlength="8"><button type="button" class="password-toggle" data-target="reset-confirm-password" aria-label="Show password"></button></div>
+        <div class="password-input"><input id="reset-confirm-password" type="password" placeholder="Repeat your password" required minlength="8"><button type="button" class="password-toggle" data-target="reset-confirm-password" aria-label="Show password">Show</button></div>
         <p id="reset-password-error" class="field-error hidden"></p>
         <button type="submit" class="primary">Reset Password</button>
       </form>
@@ -165,6 +166,10 @@
           <span class="nav-icon" aria-hidden="true">▣</span>
           <span>Campus Map</span>
         </button>
+        <button class="nav-item" type="button" data-target="location">
+          <span class="nav-icon" aria-hidden="true">📍</span>
+          <span>Find Location</span>
+        </button>
         <a class="nav-item" href="/canteen" style="text-decoration:none;color:inherit">
           <span class="nav-icon" aria-hidden="true">🍔</span>
           <span>Smart Canteen</span>
@@ -200,10 +205,13 @@
         </div>
 
         <div class="header-actions">
-          <button class="ghost-button icon-button" type="button" aria-label="Search">
+          <div id="global-search-panel" class="header-search-panel hidden">
+            <input id="global-search-input" type="search" placeholder="Search campus..." aria-label="Search campus content" />
+          </div>
+          <button id="global-search-btn" class="ghost-button icon-button" type="button" aria-label="Search">
             <span aria-hidden="true">⌕</span>
           </button>
-          <button class="ghost-button icon-button" type="button" aria-label="Notifications">
+          <button id="global-notifications-btn" class="ghost-button icon-button" type="button" aria-label="Notifications">
             <span aria-hidden="true">🔔</span>
             <span class="notification-dot" aria-hidden="true"></span>
           </button>
@@ -350,14 +358,25 @@
                   <button type="submit">Ask</button>
                 </form>
 
-                <div id="suggestion-box" class="suggestion hidden" aria-live="polite">
-                  <p><strong>Intent:</strong> <span id="sugg-intent"></span></p>
-                  <p><strong>Category:</strong> <span id="sugg-category"></span></p>
-                  <p><strong>Priority:</strong> <span id="sugg-priority"></span></p>
-                  <p><strong>Suggested department:</strong> <span id="sugg-department"></span></p>
-                  <p><strong>Next action:</strong> <span id="sugg-action"></span></p>
-                  <button id="submit-complaint-btn" class="primary" type="button">Submit as Complaint</button>
-                </div>
+                <form id="complaint-upload-form" class="complaint-upload-form hidden" enctype="multipart/form-data" aria-live="polite">
+                  <div id="suggestion-box" class="suggestion">
+                    <p><strong>Intent:</strong> <span id="sugg-intent"></span></p>
+                    <p><strong>Category:</strong> <span id="sugg-category"></span></p>
+                    <p><strong>Priority:</strong> <span id="sugg-priority"></span></p>
+                    <p><strong>Suggested department:</strong> <span id="sugg-department"></span></p>
+                    <p><strong>Next action:</strong> <span id="sugg-action"></span></p>
+                  </div>
+
+                  <div class="complaint-photo-section">
+                    <label for="complaint-photo" class="field-label">Add a photo (optional)</label>
+                    <input id="complaint-photo" type="file" accept="image/*" capture="environment">
+                    <small class="field-help">Please avoid including other people's faces, ID cards, or personal details in the photo.</small>
+                    <img id="complaint-photo-preview" class="photo-preview hidden" alt="Selected photo preview">
+                    <p id="complaint-photo-error" class="inline-error hidden" role="alert"></p>
+                  </div>
+
+                  <button id="submit-complaint-btn" class="primary" type="submit">Submit as Complaint</button>
+                </form>
 
                 <div class="example-questions">
                   <button type="button" class="example-question" data-example="Where is the library?">Where is the library?</button>
@@ -433,11 +452,15 @@
                   <p class="section-kicker">Campus navigation</p>
                   <h2>Explore Campus</h2>
                 </div>
-                <button class="pill-button" type="button">Open Full Map</button>
+                <button id="open-full-map-btn" class="pill-button" type="button">Open Full Map</button>
               </div>
 
               <div class="map-toolbar">
                 <button id="map-locate-btn" class="primary-button" type="button">Where Am I?</button>
+                <button id="map-manual-location-btn" class="secondary-button" type="button">Set My Location Manually</button>
+                <select id="map-manual-location" class="hidden" aria-label="Choose your manual starting building">
+                  <option value="">I am currently at...</option>
+                </select>
                 <select id="map-to" aria-label="Choose destination">
                   <option value="">Guide me to...</option>
                 </select>
@@ -447,13 +470,57 @@
 
               <p id="map-locate-status" class="map-hint hidden"></p>
 
-              <div id="map-container" class="map-container">
-                <img id="campus-map-img" src="{{ url_for('static', filename='campus_map.jpg') }}" alt="Campus map preview">
-                <svg id="map-svg" class="map-svg" aria-label="Campus walking route"></svg>
-                <div id="map-pins"></div>
+              <div id="map-container" class="map-container" aria-label="Interactive GPS map of SKCET campus">
+                <div id="campus-map"></div>
+                <div id="map-pins" aria-hidden="true"></div>
               </div>
 
               <div id="map-info-box" class="map-info-box hidden"></div>
+            </div>
+          </section>
+
+          <section id="tab-location" class="panel-section">
+            <div class="card panel-card">
+              <div class="section-header">
+                <div>
+                  <p class="section-kicker">Campus navigation</p>
+                  <h2>Campus Copilot — Find a Location</h2>
+                </div>
+              </div>
+
+              <div class="location-lookup-form">
+                <div class="field-grid">
+                  <label>
+                    <span>Block</span>
+                    <select id="location-block-dropdown" aria-label="Choose a campus block">
+                      <option value="">Select a block...</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Room / Lab</span>
+                    <select id="location-room-dropdown" aria-label="Choose a room or lab" disabled>
+                      <option value="">Select a block first...</option>
+                    </select>
+                  </label>
+                </div>
+                <button id="location-search-btn" class="primary-button" type="button">Search</button>
+              </div>
+
+              <div id="location-result" class="location-result hidden">
+                <div class="card-soft location-card">
+                  <div class="location-info">
+                    <h3 id="result-location-name">—</h3>
+                    <p id="result-building-name" class="location-building">—</p>
+                    <p id="result-floor" class="location-floor">—</p>
+                    <div class="location-tags">
+                      <span class="location-tag building-gps">Building GPS: Used</span>
+                      <span class="location-tag room-gps">Room GPS: Not Required</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div id="location-error" class="error-text hidden"></div>
             </div>
           </section>
 
@@ -573,6 +640,7 @@
     </div>
   </div>
 
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="{{ url_for('static', filename='script.js') }}"></script>
 </div>
 </body>

@@ -3,6 +3,66 @@
   const navItems = document.querySelectorAll(".nav-item[data-target]");
   const sections = document.querySelectorAll(".panel-section");
 
+  function toggleGlobalSearch() {
+    const panel = document.getElementById("global-search-panel");
+    const input = document.getElementById("global-search-input");
+    if (!panel || !input) return;
+    const isHidden = panel.classList.toggle("hidden");
+    if (!isHidden) {
+      input.focus();
+      input.value = input.value || "";
+    }
+  }
+
+  function handleGlobalSearch() {
+    const input = document.getElementById("global-search-input");
+    const query = (input?.value || "").trim().toLowerCase();
+
+    sections.forEach((section) => {
+      const text = (section.textContent || "").toLowerCase();
+      const matches = !query || text.includes(query);
+      section.style.display = matches ? "" : "none";
+    });
+
+    navItems.forEach((button) => {
+      const target = button.dataset.target;
+      if (!target) return;
+      const label = (button.textContent || "").toLowerCase();
+      const matches = !query || label.includes(query) || target === "dashboard";
+      button.style.display = matches ? "" : "none";
+    });
+
+    const visibleSections = [...sections].filter((section) => section.style.display !== "none");
+    if (visibleSections.length) {
+      const firstVisible = visibleSections[0];
+      if (firstVisible?.id) {
+        const target = firstVisible.id.replace(/^tab-/, "");
+        switchTab(target);
+      }
+    }
+  }
+
+  function toggleNotificationsPanel() {
+    const target = document.getElementById("tab-notifications");
+    if (target) switchTab("notifications");
+  }
+
+  function renderNotifications() {
+    const list = document.getElementById("notification-list");
+    if (!list) return;
+
+    list.innerHTML = `
+      <div class="timeline-item">
+        <div class="timeline-icon">✓</div>
+        <div>
+          <h4>Everything is up to date</h4>
+          <p>No recent campus updates.</p>
+        </div>
+        <span class="timeline-time">Today</span>
+      </div>
+    `;
+  }
+
   function switchTab(target) {
     navItems.forEach((btn) => btn.classList.toggle("active", btn.dataset.target === target));
     sections.forEach((sec) => sec.classList.toggle("active", sec.id === `tab-${target}`));
@@ -35,6 +95,16 @@
   document.getElementById("switch-user-btn").addEventListener("click", () => {
       // Preserve theme when switching to student view
       location.href = "/";
+  });
+
+  document.getElementById("global-search-btn")?.addEventListener("click", toggleGlobalSearch);
+  document.getElementById("global-notifications-btn")?.addEventListener("click", toggleNotificationsPanel);
+  document.getElementById("global-search-input")?.addEventListener("input", handleGlobalSearch);
+  document.getElementById("global-search-input")?.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      const panel = document.getElementById("global-search-panel");
+      if (panel) panel.classList.add("hidden");
+    }
   });
 
   function escapeHtml(str) {
@@ -260,6 +330,11 @@
       const options = STATUSES.map(
         (s) => `<option value="${s}" ${s === c.status ? "selected" : ""}>${s}</option>`
       ).join("");
+      const photoFilename = c.photo_filename ? c.photo_filename.trim() : "";
+      const photoUrl = photoFilename ? `/complaint/photo/${c.id}` : "";
+      const photoMarkup = photoUrl
+        ? `<a href="${photoUrl}" target="_blank" rel="noopener noreferrer" class="complaint-photo-link admin-photo-link"><img class="complaint-thumb" src="${photoUrl}" alt="Complaint photo"></a>`
+        : "";
   
       div.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: start;">
@@ -267,6 +342,7 @@
                 <span class="badge ${c.priority ? c.priority.toLowerCase() : ''}">${c.priority}</span>
                 <strong style="margin-left: 8px;">${escapeHtml(c.category)}</strong>
                 <p style="margin: 8px 0; color: var(--body-text);">${escapeHtml(c.description)}</p>
+                ${photoMarkup}
                 <div class="meta">${escapeHtml(c.student_name)} (${escapeHtml(c.roll_number)}) · ${new Date(c.created_at).toLocaleString()}</div>
             </div>
             <div>
@@ -442,6 +518,7 @@
   }
 
   // Initial load
+  renderNotifications();
   loadProfile();
   loadDashboardStats();
 

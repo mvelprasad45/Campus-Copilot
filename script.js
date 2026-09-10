@@ -208,6 +208,7 @@
         const isPassword = input.type === "password";
         input.type = isPassword ? "text" : "password";
         toggle.setAttribute("aria-label", isPassword ? "Hide password" : "Show password");
+        toggle.textContent = isPassword ? "Hide" : "Show";
       });
     });
 
@@ -232,6 +233,16 @@
     document.getElementById("show-verify-login-link")?.addEventListener("click", (e) => { e.preventDefault(); switchAuthView("login"); });
     document.getElementById("show-admin-access-link")?.addEventListener("click", (e) => { e.preventDefault(); updateAccessTabs("admin"); });
     document.getElementById("show-student-access-link")?.addEventListener("click", (e) => { e.preventDefault(); updateAccessTabs("student"); });
+
+    document.getElementById("global-search-btn")?.addEventListener("click", toggleGlobalSearch);
+    document.getElementById("global-notifications-btn")?.addEventListener("click", toggleNotificationsPanel);
+    document.getElementById("global-search-input")?.addEventListener("input", handleGlobalSearch);
+    document.getElementById("global-search-input")?.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        const panel = document.getElementById("global-search-panel");
+        if (panel) panel.classList.add("hidden");
+      }
+    });
 
     document.getElementById("login-form")?.addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -371,6 +382,58 @@
     });
   }
 
+  function toggleGlobalSearch() {
+    const panel = document.getElementById("global-search-panel");
+    const input = document.getElementById("global-search-input");
+    if (!panel || !input) return;
+
+    if (panel.classList.contains("hidden")) {
+      panel.classList.remove("hidden");
+      input.focus();
+      input.value = input.value || "";
+    } else {
+      panel.classList.add("hidden");
+      input.blur();
+    }
+  }
+
+  function handleGlobalSearch() {
+    const input = document.getElementById("global-search-input");
+    const query = (input?.value || "").trim().toLowerCase();
+
+    document.querySelectorAll(".panel-section").forEach((section) => {
+      const text = (section.textContent || "").toLowerCase();
+      const matches = !query || text.includes(query);
+      section.style.display = matches ? "" : "none";
+    });
+
+    document.querySelectorAll(".nav-item").forEach((button) => {
+      if (!button.dataset.target) return;
+      const target = button.dataset.target;
+      const label = (button.textContent || "").toLowerCase();
+      const matches = !query || label.includes(query) || target === "dashboard";
+      button.style.display = matches ? "" : "none";
+    });
+
+    const visibleSections = [...document.querySelectorAll(".panel-section")].filter((section) => section.style.display !== "none");
+    if (visibleSections.length) {
+      const firstVisible = visibleSections[0];
+      if (firstVisible?.id) {
+        const target = firstVisible.id.replace(/^tab-/, "");
+        openPanel(target);
+      }
+    }
+  }
+
+  function toggleNotificationsPanel() {
+    const target = document.getElementById("tab-notifications");
+    if (target) {
+      openPanel("notifications");
+      const searchPanel = document.getElementById("global-search-panel");
+      if (searchPanel) searchPanel.classList.add("hidden");
+    }
+  }
+
   function attachNavigationHandlers() {
     document.querySelectorAll(".nav-item").forEach((button) => {
       button.addEventListener("click", () => {
@@ -425,16 +488,25 @@
       return;
     }
 
-    list.innerHTML = items.map((item) => `
-      <div class="list-item">
-        <div class="list-item-head">
-          <strong>${escapeHtml(item.category || "Complaint")}</strong>
-          <span class="badge ${String(item.priority || "Medium").toLowerCase()}">${escapeHtml(item.priority || "Medium")}</span>
+    list.innerHTML = items.map((item) => {
+      const photoFilename = item.photo_filename ? item.photo_filename.trim() : "";
+      const photoUrl = photoFilename ? `/complaint/photo/${item.id}` : "";
+      const photoMarkup = photoUrl
+        ? `<a class="complaint-photo-link" href="${photoUrl}" target="_blank" rel="noopener noreferrer"><img class="complaint-thumb" src="${photoUrl}" alt="Complaint photo"></a>`
+        : "";
+
+      return `
+        <div class="list-item">
+          <div class="list-item-head">
+            <strong>${escapeHtml(item.category || "Complaint")}</strong>
+            <span class="badge ${String(item.priority || "Medium").toLowerCase()}">${escapeHtml(item.priority || "Medium")}</span>
+          </div>
+          <p>${escapeHtml(item.description || "No description provided.")}</p>
+          ${photoMarkup}
+          <div class="list-meta"><span>${escapeHtml(item.status || "Open")}</span><span>•</span><span>${escapeHtml(item.created_at || "Recently")}</span></div>
         </div>
-        <p>${escapeHtml(item.description || "No description provided.")}</p>
-        <div class="list-meta"><span>${escapeHtml(item.status || "Open")}</span><span>•</span><span>${escapeHtml(item.created_at || "Recently")}</span></div>
-      </div>
-    `).join("");
+      `;
+    }).join("");
   }
 
   function renderLostFound(items) {
@@ -525,7 +597,43 @@
   function attachAssistantHandlers() {
     const form = document.getElementById("assistant-form");
     const suggestionBox = document.getElementById("suggestion-box");
+    const complaintForm = document.getElementById("complaint-upload-form");
     const complaintButton = document.getElementById("submit-complaint-btn");
+    const photoInput = document.getElementById("complaint-photo");
+    const photoPreview = document.getElementById("complaint-photo-preview");
+    const photoError = document.getElementById("complaint-photo-error");
+
+    function updateComplaintPhotoPreview() {
+      const file = photoInput?.files?.[0];
+      if (!file) {
+        if (photoPreview) {
+          photoPreview.src = "";
+          photoPreview.classList.add("hidden");
+        }
+        if (photoError) photoError.classList.add("hidden");
+        return;
+      }
+
+      if (!file.type.startsWith("image/")) {
+        if (photoError) {
+          photoError.textContent = "Please choose a valid image file.";
+          photoError.classList.remove("hidden");
+        }
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (photoPreview) {
+          photoPreview.src = reader.result;
+          photoPreview.classList.remove("hidden");
+        }
+        if (photoError) photoError.classList.add("hidden");
+      };
+      reader.readAsDataURL(file);
+    }
+
+    photoInput?.addEventListener("change", updateComplaintPhotoPreview);
 
     form?.addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -572,8 +680,11 @@
         suggestionBox.classList.remove("hidden");
       }
 
+      if (complaintForm) {
+        complaintForm.classList.toggle("hidden", data.next_action !== "submit_complaint");
+      }
       if (complaintButton) {
-        complaintButton.classList.toggle("hidden", data.next_action !== "submit_complaint");
+        complaintButton.disabled = data.next_action !== "submit_complaint";
       }
 
       const aiCount = Number(localStorage.getItem("campuscopilot_ai_queries") || "0") + 1;
@@ -589,17 +700,33 @@
       if (target) openPanel(target);
     });
 
-    complaintButton?.addEventListener("click", async () => {
+    complaintForm?.addEventListener("submit", async (e) => {
+      e.preventDefault();
       const message = state.lastQuery;
       if (!message) return;
 
-      const res = await fetch("/api/complaints", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ description: message }),
-      });
+      const formData = new FormData();
+      formData.append("description", message);
+      const selectedPhoto = photoInput?.files?.[0];
+      if (selectedPhoto) {
+        formData.append("photo", selectedPhoto);
+      }
 
-      if (res.ok) {
+      try {
+        const res = await fetch("/api/complaints", {
+          method: "POST",
+          body: formData,
+        });
+
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          if (photoError) {
+            photoError.textContent = data.error || "Upload failed. Please try again.";
+            photoError.classList.remove("hidden");
+          }
+          return;
+        }
+
         const chatLog = document.getElementById("chat-log");
         if (chatLog) {
           const bubble = document.createElement("div");
@@ -608,8 +735,21 @@
           chatLog.appendChild(bubble);
         }
         if (suggestionBox) suggestionBox.classList.add("hidden");
+        if (complaintForm) complaintForm.classList.add("hidden");
+        if (photoInput) photoInput.value = "";
+        if (photoPreview) {
+          photoPreview.src = "";
+          photoPreview.classList.add("hidden");
+        }
+        if (photoError) photoError.classList.add("hidden");
         state.lastQuery = "";
         refreshDashboardData();
+      } catch (error) {
+        console.error("Complaint upload failed:", error);
+        if (photoError) {
+          photoError.textContent = "Upload failed. Please try again.";
+          photoError.classList.remove("hidden");
+        }
       }
     });
   }
@@ -636,10 +776,14 @@
     });
   }
 
-  function initializeMap() {
+  async function initializeMap() {
     const mapPins = document.getElementById("map-pins");
     const toSelect = document.getElementById("map-to");
+    const manualLocationButton = document.getElementById("map-manual-location-btn");
+    const manualLocationSelect = document.getElementById("map-manual-location");
     if (!mapPins || !toSelect) return;
+    let gpsLocation = null;
+    let manualLocation = null;
 
     const locations = [
       { id: "entrance", name: "Main Entrance", x: 8, y: 16, info: "Main gate and entry road onto campus." },
@@ -651,6 +795,22 @@
       { id: "hall", name: "SKCET Hall", x: 67.2, y: 16.3, info: "Main hall / auditorium building." },
       { id: "bikeparking", name: "Bike Parking", x: 30.3, y: 33.9, info: "Bike / two-wheeler parking area." },
     ];
+
+    try {
+      const response = await fetch("/api/buildings");
+      if (!response.ok) throw new Error("Failed to load building coordinates");
+      const buildings = await response.json();
+      const buildingsByName = new Map(buildings.map((building) => [building.name, building]));
+      locations.forEach((location) => {
+        const building = buildingsByName.get(location.name);
+        if (building) {
+          location.latitude = building.latitude;
+          location.longitude = building.longitude;
+        }
+      });
+    } catch (error) {
+      console.error("Error loading building coordinates:", error);
+    }
 
     if (!mapPins.dataset.rendered) {
       locations.forEach((loc) => {
@@ -674,10 +834,69 @@
         option.textContent = loc.name;
         option.dataset.x = String(loc.x);
         option.dataset.y = String(loc.y);
+        if (loc.latitude !== undefined && loc.longitude !== undefined) {
+          option.dataset.latitude = String(loc.latitude);
+          option.dataset.longitude = String(loc.longitude);
+          if (manualLocationSelect) {
+            const manualOption = option.cloneNode(true);
+            manualOption.textContent = loc.name;
+            manualLocationSelect.appendChild(manualOption);
+          }
+        }
         toSelect.appendChild(option);
       });
       mapPins.dataset.rendered = "true";
     }
+
+    const getMapPoint = (latitude, longitude) => ({
+      x: 8 + ((longitude - 76.9555) / (76.9590 - 76.9555)) * 59,
+      y: 44 - ((latitude - 11.0195) / (11.0225 - 11.0195)) * 28,
+    });
+
+    manualLocationButton?.addEventListener("click", () => {
+      manualLocationSelect?.classList.toggle("hidden");
+      manualLocationSelect?.focus();
+    });
+
+    manualLocationSelect?.addEventListener("change", () => {
+      const selected = Array.from(manualLocationSelect.options).find((option) => option.value === manualLocationSelect.value);
+      const latitude = Number(selected?.dataset.latitude);
+      const longitude = Number(selected?.dataset.longitude);
+      if (!selected || !Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+
+      const point = getMapPoint(latitude, longitude);
+      manualLocation = { latitude, longitude, x: point.x, y: point.y, name: selected.textContent };
+      let pin = document.getElementById("manual-location-pin");
+      if (!pin) {
+        pin = document.createElement("div");
+        pin.id = "manual-location-pin";
+        pin.className = "manual-location-pin";
+        pin.textContent = "M";
+        mapPins.appendChild(pin);
+      }
+      pin.style.left = `${point.x}%`;
+      pin.style.top = `${point.y}%`;
+      pin.title = `Manually set location: ${selected.textContent}`;
+      pin.setAttribute("aria-label", `Manually set location: ${selected.textContent}`);
+
+      const status = document.getElementById("map-locate-status");
+      if (status) {
+        status.textContent = `Manually set location at ${selected.textContent}. GPS location remains available.`;
+        status.classList.remove("hidden");
+        status.style.color = "";
+      }
+    });
+
+    toSelect.addEventListener("change", () => {
+      const selected = locations.find((location) => location.id === toSelect.value);
+      const box = document.getElementById("map-info-box");
+      if (!selected || !box) return;
+      const gpsText = selected.latitude !== undefined && selected.longitude !== undefined
+        ? `<p>GPS destination: ${selected.latitude.toFixed(4)}, ${selected.longitude.toFixed(4)}</p>`
+        : "";
+      box.innerHTML = `<strong>${selected.name}</strong><p>${selected.info}</p>${gpsText}`;
+      box.classList.remove("hidden");
+    });
 
     document.getElementById("map-locate-btn")?.addEventListener("click", () => {
       if (!navigator.geolocation) {
@@ -700,17 +919,8 @@
       navigator.geolocation.getCurrentPosition(
         (position) => {
           const { latitude, longitude, accuracy } = position.coords;
-          const gpsScale = {
-            scaleX: 75081.97,
-            offsetX: -5777647.22,
-            scaleY: -77699.37,
-            offsetY: 850044.08,
-            imgW: 880,
-            imgH: 530,
-          };
-          const px = gpsScale.offsetX + gpsScale.scaleX * longitude;
-          const py = gpsScale.offsetY + gpsScale.scaleY * latitude;
-          const point = { x: (px / gpsScale.imgW) * 100, y: (py / gpsScale.imgH) * 100 };
+          const point = getMapPoint(latitude, longitude);
+          gpsLocation = { latitude, longitude, x: point.x, y: point.y, name: "Your live GPS location" };
 
           let dot = document.getElementById("my-location-dot");
           if (!dot) {
@@ -754,7 +964,8 @@
       if (!svg) return;
       svg.innerHTML = "";
 
-      if (!dot) {
+      const startLocation = manualLocation || gpsLocation;
+      if (!dot && !manualLocation) {
         const status = document.getElementById("map-locate-status");
         if (status) {
           status.textContent = 'Tap "Where Am I?" first so I know your starting point.';
@@ -776,10 +987,15 @@
       const destination = Array.from(toSelect.options).find((option) => option.value === selected);
       if (!destination) return;
 
-      const startX = parseFloat(dot.style.left || "0");
-      const startY = parseFloat(dot.style.top || "0");
+      const startX = startLocation ? startLocation.x : parseFloat(dot?.style.left || "0");
+      const startY = startLocation ? startLocation.y : parseFloat(dot?.style.top || "0");
       const endX = parseFloat(destination.dataset.x || "0");
       const endY = parseFloat(destination.dataset.y || "0");
+      const latitude = Number(destination.dataset.latitude);
+      const longitude = Number(destination.dataset.longitude);
+      const distance = startLocation && Number.isFinite(latitude) && Number.isFinite(longitude)
+        ? calculateDistanceKm(startLocation.latitude, startLocation.longitude, latitude, longitude)
+        : null;
 
       svg.innerHTML = `
         <defs>
@@ -792,7 +1008,12 @@
 
       const box = document.getElementById("map-info-box");
       if (box) {
-        box.innerHTML = `<strong>You → ${destination.textContent}</strong><p>Approximate direct-line direction shown - follow campus roads/paths heading that way.</p>`;
+        const startLabel = startLocation === manualLocation ? "Manually set location" : "Your live GPS location";
+        const gpsText = Number.isFinite(latitude) && Number.isFinite(longitude)
+          ? `<p>GPS destination: ${latitude.toFixed(4)}, ${longitude.toFixed(4)}</p>`
+          : "";
+        const distanceText = distance !== null ? `<p>Distance from ${startLabel}: ${distance.toFixed(2)} km</p>` : "";
+        box.innerHTML = `<strong>You → ${destination.textContent}</strong>${gpsText}${distanceText}<p>Approximate direct-line direction shown - follow campus roads/paths heading that way.</p>`;
         box.classList.remove("hidden");
       }
     });
@@ -807,7 +1028,322 @@
       toSelect.value = "";
       const dot = document.getElementById("my-location-dot");
       if (dot) dot.remove();
+      const manualPin = document.getElementById("manual-location-pin");
+      if (manualPin) manualPin.remove();
+      if (manualLocationSelect) manualLocationSelect.value = "";
+      gpsLocation = null;
+      manualLocation = null;
     });
+  }
+
+  async function initializeLeafletMap() {
+    const mapElement = document.getElementById("campus-map");
+    const toSelect = document.getElementById("map-to");
+    const manualLocationButton = document.getElementById("map-manual-location-btn");
+    const manualLocationSelect = document.getElementById("map-manual-location");
+    if (!mapElement || !toSelect || mapElement.dataset.initialized) return;
+    if (!window.L) {
+      mapElement.innerHTML = '<div class="map-load-error">The live map could not load. Check your internet connection and refresh the page.</div>';
+      return;
+    }
+
+    mapElement.dataset.initialized = "true";
+    const campusCenter = [10.9378, 76.9564];
+    const map = L.map(mapElement, { zoomControl: true }).setView(campusCenter, 17);
+    window.campusLeafletMap = map;
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 20,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    }).addTo(map);
+    const mapContainer = document.getElementById("map-container");
+    const resizeMap = () => map.invalidateSize({ pan: false });
+    if (mapContainer && "ResizeObserver" in window) {
+      new ResizeObserver(resizeMap).observe(mapContainer);
+    }
+    const fullMapButton = document.getElementById("open-full-map-btn");
+    fullMapButton?.addEventListener("click", () => {
+      const expanded = mapContainer?.classList.toggle("is-expanded") || false;
+      document.body.classList.toggle("map-expanded", expanded);
+      fullMapButton.textContent = expanded ? "Close Full Map" : "Open Full Map";
+      fullMapButton.setAttribute("aria-expanded", String(expanded));
+      window.setTimeout(resizeMap, 120);
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape" || !mapContainer?.classList.contains("is-expanded")) return;
+      mapContainer.classList.remove("is-expanded");
+      document.body.classList.remove("map-expanded");
+      fullMapButton.textContent = "Open Full Map";
+      fullMapButton.setAttribute("aria-expanded", "false");
+      window.setTimeout(resizeMap, 120);
+    });
+
+    const locations = [
+      { id: "entrance", name: "Main Entrance", latitude: 10.9371, longitude: 76.9538, info: "Main gate and entry road onto campus." },
+      { id: "venkatram", name: "Venkatram Learning Center", latitude: 10.938605849328804, longitude: 76.95614845441831, info: "Learning center building." },
+      { id: "foodcourt", name: "Food Court", latitude: 10.938855061181442, longitude: 76.95663446788484, info: "Campus food court." },
+      { id: "admin", name: "Admin Block", latitude: 10.937877896310905, longitude: 76.95634224673121, info: "Administrative offices." },
+      { id: "stadium", name: "SKCET Stadium", latitude: 10.93720512733253, longitude: 76.95751806013921, info: "Running track and sports ground." },
+      { id: "carparking", name: "Car Parking", latitude: 10.9370, longitude: 76.9585, info: "Car parking area." },
+      { id: "hall", name: "SKCET Hall", latitude: 10.938940413455155, longitude: 76.95906197789171, info: "Main hall / auditorium building." },
+      { id: "bikeparking", name: "Bike Parking", latitude: 10.937065992407732, longitude: 76.95419069860179, info: "Bike / two-wheeler parking area." },
+    ];
+
+    try {
+      const response = await fetch("/api/buildings");
+      if (response.ok) {
+        const buildingsByName = new Map((await response.json()).map((building) => [building.name, building]));
+        locations.forEach((location) => {
+          const building = buildingsByName.get(location.name);
+          if (building) {
+            location.latitude = Number(building.latitude);
+            location.longitude = Number(building.longitude);
+          }
+        });
+      }
+    } catch (error) {
+      console.warn("Using built-in SKCET map coordinates:", error);
+    }
+    const mapAnchor = locations.find((location) => location.id === "admin") || locations[0];
+    map.setView([mapAnchor.latitude, mapAnchor.longitude], 17);
+
+    const markers = new Map();
+    locations.forEach((location) => {
+      const marker = L.circleMarker([location.latitude, location.longitude], {
+        radius: 8, color: "#ffffff", weight: 3, fillColor: "#159a8c", fillOpacity: 1,
+      }).addTo(map);
+      marker.bindPopup(`<strong>${location.name}</strong><br>${location.info}`);
+      markers.set(location.id, marker);
+
+      const option = document.createElement("option");
+      option.value = location.id;
+      option.textContent = location.name;
+      option.dataset.latitude = String(location.latitude);
+      option.dataset.longitude = String(location.longitude);
+      toSelect.appendChild(option);
+      const manualOption = option.cloneNode(true);
+      manualOption.textContent = location.name;
+      manualLocationSelect?.appendChild(manualOption);
+    });
+
+    let gpsLocation = null;
+    let manualLocation = null;
+    let routeLine = null;
+    let currentLocationMarker = null;
+    const status = document.getElementById("map-locate-status");
+    const infoBox = document.getElementById("map-info-box");
+    const showStatus = (message, isError = false) => {
+      if (!status) return;
+      status.textContent = message;
+      status.classList.remove("hidden");
+      status.style.color = isError ? "var(--danger)" : "";
+    };
+
+    manualLocationButton?.addEventListener("click", () => {
+      manualLocationSelect?.classList.toggle("hidden");
+      manualLocationSelect?.focus();
+    });
+
+    manualLocationSelect?.addEventListener("change", () => {
+      const selected = manualLocationSelect.options[manualLocationSelect.selectedIndex];
+      const latitude = Number(selected?.dataset.latitude);
+      const longitude = Number(selected?.dataset.longitude);
+      if (!selected?.value || !Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+      manualLocation = { latitude, longitude, name: selected.textContent };
+      currentLocationMarker?.remove();
+      currentLocationMarker = L.circleMarker([latitude, longitude], {
+        radius: 9, color: "#ffffff", weight: 3, fillColor: "#f59e0b", fillOpacity: 1,
+      }).addTo(map).bindPopup(`<strong>Manual location</strong><br>${selected.textContent}`);
+      map.flyTo([latitude, longitude], 18);
+      showStatus(`Manually set location at ${selected.textContent}.`);
+    });
+
+    toSelect.addEventListener("change", () => {
+      const location = locations.find((item) => item.id === toSelect.value);
+      if (!location || !infoBox) return;
+      infoBox.innerHTML = `<strong>${location.name}</strong><p>${location.info}</p><p>GPS destination: ${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}</p>`;
+      infoBox.classList.remove("hidden");
+      markers.get(location.id)?.openPopup();
+    });
+
+    document.getElementById("map-locate-btn")?.addEventListener("click", () => {
+      if (!navigator.geolocation) {
+        showStatus("Your browser does not support GPS location.", true);
+        return;
+      }
+      showStatus("Requesting GPS location permission...");
+      navigator.geolocation.getCurrentPosition((position) => {
+        const { latitude, longitude, accuracy } = position.coords;
+        gpsLocation = { latitude, longitude, name: "Your live GPS location" };
+        currentLocationMarker?.remove();
+        currentLocationMarker = L.circleMarker([latitude, longitude], {
+          radius: 9, color: "#ffffff", weight: 3, fillColor: "#2563eb", fillOpacity: 1,
+        }).addTo(map).bindPopup("<strong>Your live GPS location</strong>");
+        map.flyTo([latitude, longitude], 18);
+        showStatus(`Location found (accuracy: ~${Math.round(accuracy)}m). Pick a destination.`);
+      }, () => showStatus("Could not get your GPS location. Allow location access and try again.", true), {
+        enableHighAccuracy: true, timeout: 10000, maximumAge: 0,
+      });
+    });
+
+    document.getElementById("map-show-path")?.addEventListener("click", async () => {
+      const start = manualLocation || gpsLocation;
+      const destination = locations.find((location) => location.id === toSelect.value);
+      if (!start) {
+        showStatus('Tap "Where Am I?" first or set your location manually.', true);
+        return;
+      }
+      if (!destination) {
+        showStatus("Pick a destination from the dropdown.", true);
+        return;
+      }
+      showStatus("Finding a route along campus roads...");
+      routeLine?.remove();
+      try {
+        const routeUrl = `https://routing.openstreetmap.de/routed-foot/route/v1/driving/${start.longitude},${start.latitude};${destination.longitude},${destination.latitude}?overview=full&geometries=geojson&alternatives=true&steps=true`;
+        const response = await fetch(routeUrl);
+        const routeData = await response.json();
+        if (!response.ok || routeData.code !== "Ok" || !routeData.routes?.length) {
+          throw new Error("No road route found");
+        }
+
+        const route = routeData.routes
+          .filter((candidate) => candidate.geometry && Number.isFinite(candidate.distance))
+          .sort((first, second) => first.distance - second.distance)[0];
+        if (!route) throw new Error("No usable road route found");
+        routeLine = L.geoJSON(route.geometry, {
+          style: { color: "#f59e0b", weight: 6, opacity: 0.95 },
+        }).addTo(map);
+        map.fitBounds(routeLine.getBounds(), { padding: [48, 48] });
+        showStatus(`Shortest walking route found to ${destination.name}.`);
+        if (infoBox) {
+          infoBox.innerHTML = `<strong>You → ${destination.name}</strong><p>GPS destination: ${destination.latitude.toFixed(5)}, ${destination.longitude.toFixed(5)}</p><p>Walking distance: ${(route.distance / 1000).toFixed(2)} km</p><p>Follow the highlighted campus walking path.</p>`;
+          infoBox.classList.remove("hidden");
+        }
+      } catch (error) {
+        console.error("Unable to load road route:", error);
+        showStatus("A road route could not be loaded. Check your internet connection and try again.", true);
+      }
+    });
+
+    document.getElementById("map-clear-path")?.addEventListener("click", () => {
+      routeLine?.remove();
+      currentLocationMarker?.remove();
+      currentLocationMarker = null;
+      gpsLocation = null;
+      manualLocation = null;
+      toSelect.value = "";
+      if (manualLocationSelect) manualLocationSelect.value = "";
+      infoBox?.classList.add("hidden");
+      status?.classList.add("hidden");
+      map.setView(campusCenter, 17);
+    });
+
+    const refreshMapSize = () => window.setTimeout(resizeMap, 80);
+    document.querySelectorAll('[data-target="map"]').forEach((control) => {
+      control.addEventListener("click", refreshMapSize);
+    });
+    window.setTimeout(refreshMapSize, 100);
+  }
+
+  function calculateDistanceKm(startLatitude, startLongitude, endLatitude, endLongitude) {
+    const earthRadiusKm = 6371;
+    const toRadians = (degrees) => degrees * Math.PI / 180;
+    const latitudeDelta = toRadians(endLatitude - startLatitude);
+    const longitudeDelta = toRadians(endLongitude - startLongitude);
+    const a = Math.sin(latitudeDelta / 2) ** 2
+      + Math.cos(toRadians(startLatitude)) * Math.cos(toRadians(endLatitude))
+      * Math.sin(longitudeDelta / 2) ** 2;
+    return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  async function loadBuildingLocations() {
+    const blockDropdown = document.getElementById("location-block-dropdown");
+    const roomDropdown = document.getElementById("location-room-dropdown");
+    if (!blockDropdown || !roomDropdown) return;
+
+    try {
+      const response = await fetch("/api/buildings-with-locations");
+      if (!response.ok) throw new Error("Failed to load building locations");
+      const buildings = await response.json();
+      buildings.forEach((building) => {
+        const option = document.createElement("option");
+        option.value = building.building;
+        option.textContent = building.building;
+        blockDropdown.appendChild(option);
+      });
+
+      blockDropdown.addEventListener("change", () => {
+        const building = buildings.find((item) => item.building === blockDropdown.value);
+        roomDropdown.innerHTML = '<option value="">Select a room or lab...</option>';
+        roomDropdown.disabled = !building;
+        (building?.locations || []).forEach((location) => {
+          const option = document.createElement("option");
+          option.value = location;
+          option.textContent = location;
+          roomDropdown.appendChild(option);
+        });
+      });
+    } catch (error) {
+      console.error("Error loading building locations:", error);
+      blockDropdown.innerHTML = '<option value="">Error loading blocks</option>';
+      roomDropdown.innerHTML = '<option value="">Locations unavailable</option>';
+    }
+  }
+
+  async function handleLocationSearch() {
+    const dropdown = document.getElementById("location-room-dropdown");
+    const resultDiv = document.getElementById("location-result");
+    const errorDiv = document.getElementById("location-error");
+    
+    if (!dropdown) return;
+    
+    const selectedLocation = dropdown.value.trim();
+    if (!selectedLocation) {
+      showError(errorDiv, "Please select a location.");
+      if (resultDiv) resultDiv.classList.add("hidden");
+      return;
+    }
+    
+    try {
+      const response = await fetch(`/api/lookup?name=${encodeURIComponent(selectedLocation)}`);
+      const data = await response.json();
+      
+      if (!response.ok) {
+        showError(errorDiv, data.error || "Location not found.");
+        if (resultDiv) resultDiv.classList.add("hidden");
+        return;
+      }
+      
+      hideError(errorDiv);
+      
+      const locationName = document.getElementById("result-location-name");
+      const buildingName = document.getElementById("result-building-name");
+      const floor = document.getElementById("result-floor");
+      
+      if (locationName) locationName.textContent = data.location;
+      if (buildingName) buildingName.textContent = `is located inside ${data.building}`;
+      if (floor) floor.textContent = `Floor: ${data.floor}`;
+      
+      if (resultDiv) resultDiv.classList.remove("hidden");
+    } catch (error) {
+      console.error("Error during location lookup:", error);
+      showError(errorDiv, "An error occurred while searching for the location.");
+      if (resultDiv) resultDiv.classList.add("hidden");
+    }
+  }
+
+  function attachLocationLookupHandlers() {
+    loadBuildingLocations();
+    
+    const searchBtn = document.getElementById("location-search-btn");
+    if (searchBtn) {
+      searchBtn.addEventListener("click", handleLocationSearch);
+    }
+    
+    const dropdown = document.getElementById("location-room-dropdown");
+    if (dropdown) {
+      dropdown.addEventListener("change", handleLocationSearch);
+    }
   }
 
   function initialize() {
@@ -816,7 +1352,8 @@
     attachNavigationHandlers();
     attachAssistantHandlers();
     attachLostFoundHandlers();
-    initializeMap();
+    attachLocationLookupHandlers();
+    initializeLeafletMap();
     openPanel("dashboard");
     refreshDashboardData();
     applyAiCounter();
@@ -841,6 +1378,9 @@
       const sectionTarget = section.id.replace(/^tab-/, "");
       section.classList.toggle("active", sectionTarget === normalized);
     });
+    if (normalized === "map" && window.campusLeafletMap) {
+      window.setTimeout(() => window.campusLeafletMap.invalidateSize({ pan: false }), 120);
+    }
   }
 
   initialize();

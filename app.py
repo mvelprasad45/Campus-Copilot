@@ -26,7 +26,7 @@ environment settings when deploying):
   GOOGLE_API_KEY  Optional. Enables Gemini-based complaint classification.
 """
 
-from flask import Flask, request, jsonify, render_template, session, redirect, url_for, send_file
+from flask import Flask, request, jsonify, render_template, session, redirect, url_for, send_file, send_from_directory
 from werkzeug.security import generate_password_hash, check_password_hash
 import psycopg2
 import psycopg2.extras
@@ -40,6 +40,7 @@ import hashlib
 import hmac
 import smtplib
 import io
+import uuid
 from email.message import EmailMessage
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
@@ -57,6 +58,12 @@ DEBUG = os.environ.get("FLASK_DEBUG", "0") == "1"
 # Keep the current flat project layout working: the HTML templates and static
 # assets are all stored beside this file.
 app = Flask(__name__, template_folder=".", static_folder=".", static_url_path="/static")
+app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
+UPLOAD_FOLDER = os.path.join(app.root_path, "uploads", "complaints")
+ALLOWED_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+ALLOWED_IMAGE_MIME_TYPES = {"image/png", "image/jpeg", "image/webp", "image/gif"}
+MAX_UPLOAD_SIZE_BYTES = 5 * 1024 * 1024
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # --- SECRET_KEY -------------------------------------------------------------
 # In production this MUST come from the environment. If it isn't set, anyone
@@ -267,6 +274,7 @@ def init_db():
             cur.execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'published'")
             cur.execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS created_by INTEGER")
             cur.execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ")
+            cur.execute("ALTER TABLE complaints ADD COLUMN IF NOT EXISTS photo_filename TEXT")
 
             cur.execute(
                 """
@@ -279,6 +287,120 @@ def init_db():
                     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMPTZ
                 )
+                """
+            )
+
+            # Indoor Sub-Location Lookup System tables
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS buildings (
+                    id SERIAL PRIMARY KEY,
+                    name TEXT NOT NULL UNIQUE,
+                    latitude DECIMAL(10, 8) NOT NULL,
+                    longitude DECIMAL(11, 8) NOT NULL
+                )
+                """
+            )
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS sublocations (
+                    id SERIAL PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    building_id INTEGER NOT NULL REFERENCES buildings(id),
+                    floor TEXT NOT NULL
+                )
+                """
+            )
+            
+            buildings_data = [
+                ("Bike Parking", "10.937065992407732", "76.95419069860179"),
+                ("Staff Bike Parking", "10.937860824395427", "76.95474712688755"),
+                ("MCA Block", "10.937250001145884", "76.95593397447838"),
+                ("Classroom Block 1", "10.937227259023842", "76.95625770510364"),
+                ("Classroom Block 2", "10.937224552397229", "76.95664122070211"),
+                ("Classroom Block 3", "10.936770620677912", "76.95580808784263"),
+                ("Classroom Block 4", "10.936348645238558", "76.95581590335559"),
+                ("Classroom Block 5", "10.93712519394808", "76.9554218524556"),
+                ("Classroom Block 6", "10.93675780726599", "76.95523532978821"),
+                ("Classroom Block ECE", "10.9367271995425", "76.9562472986592"),
+                ("Classroom Block EEE", "10.93636172237288", "76.95623213542355"),
+                ("SKCET Stadium", "10.93720512733253", "76.95751806013921"),
+                ("Admin Block", "10.937877896310905", "76.95634224673121"),
+                ("Venkatram Learning Center", "10.938605849328804", "76.95614845441831"),
+                ("Conventional Hall", "10.938385872380232", "76.95670636519277"),
+                ("Food Court", "10.938855061181442", "76.95663446788484"),
+                ("SKCET Hall", "10.938940413455155", "76.95906197789171"),
+                ("CS Block", "11.0208", "76.9573"),
+                ("ECE Block", "11.0211", "76.9580"),
+                ("Mechanical Block", "11.0205", "76.9583"),
+            ]
+            for name, lat, lon in buildings_data:
+                cur.execute(
+                    """
+                    INSERT INTO buildings (name, latitude, longitude)
+                    VALUES (%s, %s, %s)
+                    ON CONFLICT (name) DO UPDATE SET
+                        latitude = EXCLUDED.latitude,
+                        longitude = EXCLUDED.longitude
+                    """,
+                    (name, lat, lon)
+                )
+
+            # Keep legacy records available while assigning known rooms to the requested blocks.
+            cur.execute(
+                """
+                UPDATE sublocations SET building_id = (SELECT id FROM buildings WHERE name = 'Admin Block')
+                WHERE name = 'Seminar Hall'
+                """
+            )
+            cur.execute(
+                """
+                UPDATE sublocations SET building_id = (SELECT id FROM buildings WHERE name = 'CS Block')
+                WHERE name IN ('Lab 1', 'Lab 2')
+                """
+            )
+
+            cur.execute("SELECT id, name FROM buildings")
+            buildings_map = {row["name"]: row["id"] for row in cur.fetchall()}
+            sublocations_data = [
+                ("Placement Cell", "Admin Block", "1st Floor"),
+                ("Seminar Hall", "Admin Block", "2nd Floor"),
+                ("Lab 1", "CS Block", "2nd Floor"),
+                ("Lab 2", "CS Block", "2nd Floor"),
+                ("IDE Lab", "ECE Block", "2nd Floor"),
+                ("Mechanical Lab", "Mechanical Block", "2nd Floor"),
+            ]
+            sublocations_data.extend(
+                (
+                    f"C{block} {room:02d}",
+                    f"Classroom Block {block}",
+                    "Ground Floor" if room <= 9 else "1st Floor" if room <= 19 else "2nd Floor",
+                )
+                for block in range(1, 4)
+                for room in range(1, 26)
+            )
+            for name, building_name, floor in sublocations_data:
+                building_id = buildings_map[building_name]
+                cur.execute(
+                    """
+                    INSERT INTO sublocations (name, building_id, floor)
+                    SELECT %s, %s, %s
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM sublocations WHERE name = %s
+                    )
+                    """,
+                    (name, building_id, floor, name)
+                )
+
+            cur.execute(
+                """
+                UPDATE sublocations
+                SET floor = CASE
+                    WHEN substring(name FROM '[0-9]{2}$')::integer BETWEEN 1 AND 9 THEN 'Ground Floor'
+                    WHEN substring(name FROM '[0-9]{2}$')::integer BETWEEN 10 AND 19 THEN '1st Floor'
+                    WHEN substring(name FROM '[0-9]{2}$')::integer BETWEEN 20 AND 25 THEN '2nd Floor'
+                END
+                WHERE name ~ '^C[1-3] (0[1-9]|1[0-9]|2[0-5])$'
                 """
             )
 
@@ -811,7 +933,12 @@ def login():
     conn = get_db()
     cur = conn.cursor()
     cur.execute(
-        "SELECT * FROM students WHERE name ILIKE %s ORDER BY id LIMIT 1", (name,)
+        """
+        SELECT * FROM students
+        WHERE name ILIKE %s OR roll_number ILIKE %s OR college_email ILIKE %s
+        ORDER BY id LIMIT 1
+        """,
+        (name, name, name),
     )
     student = cur.fetchone()
     conn.close()
@@ -1120,23 +1247,115 @@ def create_complaint():
     if not student:
         return jsonify({"error": "Not logged in"}), 401
 
-    data = request.get_json(force=True)
-    description = data.get("description", "").strip()
+    if request.content_type and "multipart/form-data" in request.content_type:
+        description = request.form.get("description", "").strip()
+        uploaded_photo = request.files.get("photo")
+    else:
+        data = request.get_json(force=True)
+        description = (data or {}).get("description", "").strip()
+        uploaded_photo = None
+
     if not description or len(description) > 2000:
         return jsonify({"error": "description is required"}), 400
+
+    photo_filename = None
+    if uploaded_photo and uploaded_photo.filename:
+        try:
+            photo_filename = save_uploaded_complaint_photo(uploaded_photo)
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
 
     classification = classify_text(description)
 
     conn = get_db()
     cur = conn.cursor()
     cur.execute(
-        "INSERT INTO complaints (student_id, name, roll_number, college_email, description, category, priority, status, created_at) "
-        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
-        (student["id"], student["name"], student["roll_number"], student["college_email"], description, classification["category"], classification["priority"], "Open", datetime.now()),
+        "INSERT INTO complaints (student_id, name, roll_number, college_email, description, category, priority, status, photo_filename, created_at) "
+        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+        (student["id"], student["name"], student["roll_number"], student["college_email"], description, classification["category"], classification["priority"], "Open", photo_filename, datetime.now()),
     )
     conn.commit()
     conn.close()
-    return jsonify({"message": "Complaint submitted", **classification}), 201
+    response = {"message": "Complaint submitted", **classification}
+    if photo_filename:
+        response["photo_filename"] = photo_filename
+    return jsonify(response), 201
+
+
+def _looks_like_valid_image_bytes(image_header):
+    if len(image_header) < 12:
+        return False
+    if image_header.startswith(b"\x89PNG\r\n\x1a\n"):
+        return True
+    if image_header.startswith(b"\xff\xd8\xff"):
+        return True
+    if image_header.startswith((b"GIF87a", b"GIF89a")):
+        return True
+    if image_header.startswith(b"RIFF") and image_header[8:12] == b"WEBP":
+        return True
+    return False
+
+
+def save_uploaded_complaint_photo(file_storage):
+    if not file_storage or not file_storage.filename:
+        return None
+
+    filename = file_storage.filename or ""
+    ext = os.path.splitext(filename)[1].lower()
+    mimetype = (file_storage.mimetype or "").lower()
+
+    if ext not in ALLOWED_IMAGE_EXTENSIONS:
+        raise ValueError("Please upload a valid image file (JPG, PNG, GIF, or WEBP).")
+    if mimetype not in ALLOWED_IMAGE_MIME_TYPES:
+        raise ValueError("Please upload a valid image file.")
+
+    file_storage.seek(0)
+    image_header = file_storage.stream.read(12)
+    file_storage.seek(0)
+    if not _looks_like_valid_image_bytes(image_header):
+        raise ValueError("Please upload a valid image file.")
+
+    file_storage.seek(0, os.SEEK_END)
+    file_size = file_storage.tell()
+    file_storage.seek(0)
+    if file_size <= 0 or file_size > MAX_UPLOAD_SIZE_BYTES:
+        raise ValueError("The photo is too large. Please upload an image under 5MB.")
+
+    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+    unique_filename = f"{uuid.uuid4().hex}{ext}"
+    save_path = os.path.join(UPLOAD_FOLDER, unique_filename)
+    file_storage.save(save_path)
+    return unique_filename
+
+
+@app.route("/complaint/photo/<int:complaint_id>")
+def complaint_photo(complaint_id):
+    if not session.get("student_id") and not session.get("admin_id"):
+        return jsonify({"error": "Not logged in"}), 403
+
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM complaints WHERE id = %s", (complaint_id,))
+    complaint = cur.fetchone()
+    conn.close()
+
+    if not complaint or not complaint.get("photo_filename"):
+        return jsonify({"error": "Photo not found"}), 404
+
+    student = current_student_record()
+    admin = current_admin()
+    if admin:
+        allowed = True
+    elif student and complaint.get("student_id") == student.get("id") and complaint.get("roll_number") == student.get("roll_number"):
+        allowed = True
+    else:
+        allowed = False
+
+    if not allowed:
+        return jsonify({"error": "Forbidden"}), 403
+
+    safe_filename = os.path.basename(complaint["photo_filename"])
+    return send_from_directory(UPLOAD_FOLDER, safe_filename, conditional=True)
 
 
 # ---------------------------------------------------------------------------
@@ -2785,6 +3004,126 @@ def api_admin_create_canteen_staff():
     except Exception:
         conn.rollback()
         raise
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Routes - Indoor Sub-Location Lookup System
+# ---------------------------------------------------------------------------
+@app.route("/api/buildings", methods=["GET"])
+def api_buildings():
+    """Return building names and GPS coordinates for campus map navigation."""
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, name, latitude, longitude FROM buildings ORDER BY name"
+            )
+            buildings = [
+                {
+                    "id": row["id"],
+                    "name": row["name"],
+                    "latitude": float(row["latitude"]),
+                    "longitude": float(row["longitude"]),
+                }
+                for row in cur.fetchall()
+            ]
+        return jsonify(buildings)
+    finally:
+        conn.close()
+
+
+@app.route("/api/buildings-with-locations", methods=["GET"])
+def api_buildings_with_locations():
+    """Return the indoor lookup hierarchy as buildings with their rooms."""
+    block_order = [
+        "Admin Block",
+        "Classroom Block 1",
+        "Classroom Block 2",
+        "Classroom Block 3",
+        "CS Block",
+        "ECE Block",
+        "Mechanical Block",
+    ]
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT b.name AS building_name, s.name AS location_name
+                FROM buildings b
+                LEFT JOIN sublocations s ON s.building_id = b.id
+                WHERE b.name = ANY(%s)
+                ORDER BY array_position(%s, b.name), s.name
+                """,
+                (block_order, block_order),
+            )
+            grouped = {building: [] for building in block_order}
+            for row in cur.fetchall():
+                if row["location_name"]:
+                    grouped[row["building_name"]].append(row["location_name"])
+        return jsonify([
+            {"building": building, "locations": grouped[building]}
+            for building in block_order
+        ])
+    finally:
+        conn.close()
+
+
+@app.route("/api/locations", methods=["GET"])
+def api_locations():
+    """Get all sub-locations as a list for dropdown population."""
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, name FROM sublocations ORDER BY name"
+            )
+            sublocations = [{"id": row["id"], "name": row["name"]} for row in cur.fetchall()]
+        return jsonify(sublocations)
+    finally:
+        conn.close()
+
+
+@app.route("/api/lookup", methods=["GET"])
+def api_lookup():
+    """Look up a sub-location and return its building name, floor, and building GPS coordinates."""
+    location_name = request.args.get("name", "").strip()
+    if not location_name:
+        return jsonify({"error": "location name is required"}), 400
+    
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT 
+                    s.name as sublocation_name,
+                    s.floor,
+                    b.name as building_name,
+                    b.latitude,
+                    b.longitude
+                FROM sublocations s
+                JOIN buildings b ON s.building_id = b.id
+                WHERE s.name = %s
+                """,
+                (location_name,)
+            )
+            result = cur.fetchone()
+        
+        if not result:
+            return jsonify({"error": "Location not found"}), 404
+        
+        return jsonify({
+            "location": result["sublocation_name"],
+            "building": result["building_name"],
+            "floor": result["floor"],
+            "building_latitude": result["latitude"],
+            "building_longitude": result["longitude"],
+            "room_gps_required": False,
+            "building_gps_used": True
+        })
     finally:
         conn.close()
 
