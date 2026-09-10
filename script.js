@@ -234,6 +234,16 @@
     document.getElementById("show-admin-access-link")?.addEventListener("click", (e) => { e.preventDefault(); updateAccessTabs("admin"); });
     document.getElementById("show-student-access-link")?.addEventListener("click", (e) => { e.preventDefault(); updateAccessTabs("student"); });
 
+    document.getElementById("global-search-btn")?.addEventListener("click", toggleGlobalSearch);
+    document.getElementById("global-notifications-btn")?.addEventListener("click", toggleNotificationsPanel);
+    document.getElementById("global-search-input")?.addEventListener("input", handleGlobalSearch);
+    document.getElementById("global-search-input")?.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        const panel = document.getElementById("global-search-panel");
+        if (panel) panel.classList.add("hidden");
+      }
+    });
+
     document.getElementById("login-form")?.addEventListener("submit", async (e) => {
       e.preventDefault();
       const name = document.getElementById("login-name")?.value.trim() || "";
@@ -372,6 +382,58 @@
     });
   }
 
+  function toggleGlobalSearch() {
+    const panel = document.getElementById("global-search-panel");
+    const input = document.getElementById("global-search-input");
+    if (!panel || !input) return;
+
+    if (panel.classList.contains("hidden")) {
+      panel.classList.remove("hidden");
+      input.focus();
+      input.value = input.value || "";
+    } else {
+      panel.classList.add("hidden");
+      input.blur();
+    }
+  }
+
+  function handleGlobalSearch() {
+    const input = document.getElementById("global-search-input");
+    const query = (input?.value || "").trim().toLowerCase();
+
+    document.querySelectorAll(".panel-section").forEach((section) => {
+      const text = (section.textContent || "").toLowerCase();
+      const matches = !query || text.includes(query);
+      section.style.display = matches ? "" : "none";
+    });
+
+    document.querySelectorAll(".nav-item").forEach((button) => {
+      if (!button.dataset.target) return;
+      const target = button.dataset.target;
+      const label = (button.textContent || "").toLowerCase();
+      const matches = !query || label.includes(query) || target === "dashboard";
+      button.style.display = matches ? "" : "none";
+    });
+
+    const visibleSections = [...document.querySelectorAll(".panel-section")].filter((section) => section.style.display !== "none");
+    if (visibleSections.length) {
+      const firstVisible = visibleSections[0];
+      if (firstVisible?.id) {
+        const target = firstVisible.id.replace(/^tab-/, "");
+        openPanel(target);
+      }
+    }
+  }
+
+  function toggleNotificationsPanel() {
+    const target = document.getElementById("tab-notifications");
+    if (target) {
+      openPanel("notifications");
+      const searchPanel = document.getElementById("global-search-panel");
+      if (searchPanel) searchPanel.classList.add("hidden");
+    }
+  }
+
   function attachNavigationHandlers() {
     document.querySelectorAll(".nav-item").forEach((button) => {
       button.addEventListener("click", () => {
@@ -426,16 +488,25 @@
       return;
     }
 
-    list.innerHTML = items.map((item) => `
-      <div class="list-item">
-        <div class="list-item-head">
-          <strong>${escapeHtml(item.category || "Complaint")}</strong>
-          <span class="badge ${String(item.priority || "Medium").toLowerCase()}">${escapeHtml(item.priority || "Medium")}</span>
+    list.innerHTML = items.map((item) => {
+      const photoFilename = item.photo_filename ? item.photo_filename.trim() : "";
+      const photoUrl = photoFilename ? `/complaint/photo/${item.id}` : "";
+      const photoMarkup = photoUrl
+        ? `<a class="complaint-photo-link" href="${photoUrl}" target="_blank" rel="noopener noreferrer"><img class="complaint-thumb" src="${photoUrl}" alt="Complaint photo"></a>`
+        : "";
+
+      return `
+        <div class="list-item">
+          <div class="list-item-head">
+            <strong>${escapeHtml(item.category || "Complaint")}</strong>
+            <span class="badge ${String(item.priority || "Medium").toLowerCase()}">${escapeHtml(item.priority || "Medium")}</span>
+          </div>
+          <p>${escapeHtml(item.description || "No description provided.")}</p>
+          ${photoMarkup}
+          <div class="list-meta"><span>${escapeHtml(item.status || "Open")}</span><span>•</span><span>${escapeHtml(item.created_at || "Recently")}</span></div>
         </div>
-        <p>${escapeHtml(item.description || "No description provided.")}</p>
-        <div class="list-meta"><span>${escapeHtml(item.status || "Open")}</span><span>•</span><span>${escapeHtml(item.created_at || "Recently")}</span></div>
-      </div>
-    `).join("");
+      `;
+    }).join("");
   }
 
   function renderLostFound(items) {
@@ -526,7 +597,43 @@
   function attachAssistantHandlers() {
     const form = document.getElementById("assistant-form");
     const suggestionBox = document.getElementById("suggestion-box");
+    const complaintForm = document.getElementById("complaint-upload-form");
     const complaintButton = document.getElementById("submit-complaint-btn");
+    const photoInput = document.getElementById("complaint-photo");
+    const photoPreview = document.getElementById("complaint-photo-preview");
+    const photoError = document.getElementById("complaint-photo-error");
+
+    function updateComplaintPhotoPreview() {
+      const file = photoInput?.files?.[0];
+      if (!file) {
+        if (photoPreview) {
+          photoPreview.src = "";
+          photoPreview.classList.add("hidden");
+        }
+        if (photoError) photoError.classList.add("hidden");
+        return;
+      }
+
+      if (!file.type.startsWith("image/")) {
+        if (photoError) {
+          photoError.textContent = "Please choose a valid image file.";
+          photoError.classList.remove("hidden");
+        }
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (photoPreview) {
+          photoPreview.src = reader.result;
+          photoPreview.classList.remove("hidden");
+        }
+        if (photoError) photoError.classList.add("hidden");
+      };
+      reader.readAsDataURL(file);
+    }
+
+    photoInput?.addEventListener("change", updateComplaintPhotoPreview);
 
     form?.addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -573,8 +680,11 @@
         suggestionBox.classList.remove("hidden");
       }
 
+      if (complaintForm) {
+        complaintForm.classList.toggle("hidden", data.next_action !== "submit_complaint");
+      }
       if (complaintButton) {
-        complaintButton.classList.toggle("hidden", data.next_action !== "submit_complaint");
+        complaintButton.disabled = data.next_action !== "submit_complaint";
       }
 
       const aiCount = Number(localStorage.getItem("campuscopilot_ai_queries") || "0") + 1;
@@ -590,17 +700,33 @@
       if (target) openPanel(target);
     });
 
-    complaintButton?.addEventListener("click", async () => {
+    complaintForm?.addEventListener("submit", async (e) => {
+      e.preventDefault();
       const message = state.lastQuery;
       if (!message) return;
 
-      const res = await fetch("/api/complaints", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ description: message }),
-      });
+      const formData = new FormData();
+      formData.append("description", message);
+      const selectedPhoto = photoInput?.files?.[0];
+      if (selectedPhoto) {
+        formData.append("photo", selectedPhoto);
+      }
 
-      if (res.ok) {
+      try {
+        const res = await fetch("/api/complaints", {
+          method: "POST",
+          body: formData,
+        });
+
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          if (photoError) {
+            photoError.textContent = data.error || "Upload failed. Please try again.";
+            photoError.classList.remove("hidden");
+          }
+          return;
+        }
+
         const chatLog = document.getElementById("chat-log");
         if (chatLog) {
           const bubble = document.createElement("div");
@@ -609,8 +735,21 @@
           chatLog.appendChild(bubble);
         }
         if (suggestionBox) suggestionBox.classList.add("hidden");
+        if (complaintForm) complaintForm.classList.add("hidden");
+        if (photoInput) photoInput.value = "";
+        if (photoPreview) {
+          photoPreview.src = "";
+          photoPreview.classList.add("hidden");
+        }
+        if (photoError) photoError.classList.add("hidden");
         state.lastQuery = "";
         refreshDashboardData();
+      } catch (error) {
+        console.error("Complaint upload failed:", error);
+        if (photoError) {
+          photoError.textContent = "Upload failed. Please try again.";
+          photoError.classList.remove("hidden");
+        }
       }
     });
   }

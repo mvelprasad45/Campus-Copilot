@@ -205,10 +205,13 @@
         </div>
 
         <div class="header-actions">
-          <button class="ghost-button icon-button" type="button" aria-label="Search">
+          <div id="global-search-panel" class="header-search-panel hidden">
+            <input id="global-search-input" type="search" placeholder="Search campus..." aria-label="Search campus content" />
+          </div>
+          <button id="global-search-btn" class="ghost-button icon-button" type="button" aria-label="Search">
             <span aria-hidden="true">⌕</span>
           </button>
-          <button class="ghost-button icon-button" type="button" aria-label="Notifications">
+          <button id="global-notifications-btn" class="ghost-button icon-button" type="button" aria-label="Notifications">
             <span aria-hidden="true">🔔</span>
             <span class="notification-dot" aria-hidden="true"></span>
           </button>
@@ -355,14 +358,25 @@
                   <button type="submit">Ask</button>
                 </form>
 
-                <div id="suggestion-box" class="suggestion hidden" aria-live="polite">
-                  <p><strong>Intent:</strong> <span id="sugg-intent"></span></p>
-                  <p><strong>Category:</strong> <span id="sugg-category"></span></p>
-                  <p><strong>Priority:</strong> <span id="sugg-priority"></span></p>
-                  <p><strong>Suggested department:</strong> <span id="sugg-department"></span></p>
-                  <p><strong>Next action:</strong> <span id="sugg-action"></span></p>
-                  <button id="submit-complaint-btn" class="primary" type="button">Submit as Complaint</button>
-                </div>
+                <form id="complaint-upload-form" class="complaint-upload-form hidden" enctype="multipart/form-data" aria-live="polite">
+                  <div id="suggestion-box" class="suggestion">
+                    <p><strong>Intent:</strong> <span id="sugg-intent"></span></p>
+                    <p><strong>Category:</strong> <span id="sugg-category"></span></p>
+                    <p><strong>Priority:</strong> <span id="sugg-priority"></span></p>
+                    <p><strong>Suggested department:</strong> <span id="sugg-department"></span></p>
+                    <p><strong>Next action:</strong> <span id="sugg-action"></span></p>
+                  </div>
+
+                  <div class="complaint-photo-section">
+                    <label for="complaint-photo" class="field-label">Add a photo (optional)</label>
+                    <input id="complaint-photo" type="file" accept="image/*" capture="environment">
+                    <small class="field-help">Please avoid including other people's faces, ID cards, or personal details in the photo.</small>
+                    <img id="complaint-photo-preview" class="photo-preview hidden" alt="Selected photo preview">
+                    <p id="complaint-photo-error" class="inline-error hidden" role="alert"></p>
+                  </div>
+
+                  <button id="submit-complaint-btn" class="primary" type="submit">Submit as Complaint</button>
+                </form>
 
                 <div class="example-questions">
                   <button type="button" class="example-question" data-example="Where is the library?">Where is the library?</button>

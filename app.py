@@ -26,7 +26,7 @@ environment settings when deploying):
   GOOGLE_API_KEY  Optional. Enables Gemini-based complaint classification.
 """
 
-from flask import Flask, request, jsonify, render_template, session, redirect, url_for, send_file
+from flask import Flask, request, jsonify, render_template, session, redirect, url_for, send_file, send_from_directory
 from werkzeug.security import generate_password_hash, check_password_hash
 import psycopg2
 import psycopg2.extras
@@ -40,6 +40,7 @@ import hashlib
 import hmac
 import smtplib
 import io
+import uuid
 from email.message import EmailMessage
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
@@ -57,6 +58,12 @@ DEBUG = os.environ.get("FLASK_DEBUG", "0") == "1"
 # Keep the current flat project layout working: the HTML templates and static
 # assets are all stored beside this file.
 app = Flask(__name__, template_folder=".", static_folder=".", static_url_path="/static")
+app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
+UPLOAD_FOLDER = os.path.join(app.root_path, "uploads", "complaints")
+ALLOWED_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+ALLOWED_IMAGE_MIME_TYPES = {"image/png", "image/jpeg", "image/webp", "image/gif"}
+MAX_UPLOAD_SIZE_BYTES = 5 * 1024 * 1024
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # --- SECRET_KEY -------------------------------------------------------------
 # In production this MUST come from the environment. If it isn't set, anyone
@@ -264,6 +271,7 @@ def init_db():
             cur.execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'published'")
             cur.execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS created_by INTEGER")
             cur.execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ")
+            cur.execute("ALTER TABLE complaints ADD COLUMN IF NOT EXISTS photo_filename TEXT")
 
             cur.execute(
                 """
@@ -1236,23 +1244,115 @@ def create_complaint():
     if not student:
         return jsonify({"error": "Not logged in"}), 401
 
-    data = request.get_json(force=True)
-    description = data.get("description", "").strip()
+    if request.content_type and "multipart/form-data" in request.content_type:
+        description = request.form.get("description", "").strip()
+        uploaded_photo = request.files.get("photo")
+    else:
+        data = request.get_json(force=True)
+        description = (data or {}).get("description", "").strip()
+        uploaded_photo = None
+
     if not description or len(description) > 2000:
         return jsonify({"error": "description is required"}), 400
+
+    photo_filename = None
+    if uploaded_photo and uploaded_photo.filename:
+        try:
+            photo_filename = save_uploaded_complaint_photo(uploaded_photo)
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
 
     classification = classify_text(description)
 
     conn = get_db()
     cur = conn.cursor()
     cur.execute(
-        "INSERT INTO complaints (student_id, name, roll_number, college_email, description, category, priority, status, created_at) "
-        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
-        (student["id"], student["name"], student["roll_number"], student["college_email"], description, classification["category"], classification["priority"], "Open", datetime.now()),
+        "INSERT INTO complaints (student_id, name, roll_number, college_email, description, category, priority, status, photo_filename, created_at) "
+        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+        (student["id"], student["name"], student["roll_number"], student["college_email"], description, classification["category"], classification["priority"], "Open", photo_filename, datetime.now()),
     )
     conn.commit()
     conn.close()
-    return jsonify({"message": "Complaint submitted", **classification}), 201
+    response = {"message": "Complaint submitted", **classification}
+    if photo_filename:
+        response["photo_filename"] = photo_filename
+    return jsonify(response), 201
+
+
+def _looks_like_valid_image_bytes(image_header):
+    if len(image_header) < 12:
+        return False
+    if image_header.startswith(b"\x89PNG\r\n\x1a\n"):
+        return True
+    if image_header.startswith(b"\xff\xd8\xff"):
+        return True
+    if image_header.startswith((b"GIF87a", b"GIF89a")):
+        return True
+    if image_header.startswith(b"RIFF") and image_header[8:12] == b"WEBP":
+        return True
+    return False
+
+
+def save_uploaded_complaint_photo(file_storage):
+    if not file_storage or not file_storage.filename:
+        return None
+
+    filename = file_storage.filename or ""
+    ext = os.path.splitext(filename)[1].lower()
+    mimetype = (file_storage.mimetype or "").lower()
+
+    if ext not in ALLOWED_IMAGE_EXTENSIONS:
+        raise ValueError("Please upload a valid image file (JPG, PNG, GIF, or WEBP).")
+    if mimetype not in ALLOWED_IMAGE_MIME_TYPES:
+        raise ValueError("Please upload a valid image file.")
+
+    file_storage.seek(0)
+    image_header = file_storage.stream.read(12)
+    file_storage.seek(0)
+    if not _looks_like_valid_image_bytes(image_header):
+        raise ValueError("Please upload a valid image file.")
+
+    file_storage.seek(0, os.SEEK_END)
+    file_size = file_storage.tell()
+    file_storage.seek(0)
+    if file_size <= 0 or file_size > MAX_UPLOAD_SIZE_BYTES:
+        raise ValueError("The photo is too large. Please upload an image under 5MB.")
+
+    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+    unique_filename = f"{uuid.uuid4().hex}{ext}"
+    save_path = os.path.join(UPLOAD_FOLDER, unique_filename)
+    file_storage.save(save_path)
+    return unique_filename
+
+
+@app.route("/complaint/photo/<int:complaint_id>")
+def complaint_photo(complaint_id):
+    if not session.get("student_id") and not session.get("admin_id"):
+        return jsonify({"error": "Not logged in"}), 403
+
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM complaints WHERE id = %s", (complaint_id,))
+    complaint = cur.fetchone()
+    conn.close()
+
+    if not complaint or not complaint.get("photo_filename"):
+        return jsonify({"error": "Photo not found"}), 404
+
+    student = current_student_record()
+    admin = current_admin()
+    if admin:
+        allowed = True
+    elif student and complaint.get("student_id") == student.get("id") and complaint.get("roll_number") == student.get("roll_number"):
+        allowed = True
+    else:
+        allowed = False
+
+    if not allowed:
+        return jsonify({"error": "Forbidden"}), 403
+
+    safe_filename = os.path.basename(complaint["photo_filename"])
+    return send_from_directory(UPLOAD_FOLDER, safe_filename, conditional=True)
 
 
 # ---------------------------------------------------------------------------
