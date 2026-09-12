@@ -196,10 +196,27 @@
   }
 
   function foodThumb(item) {
-    if (item.image_url) {
-      return `<img src="${esc(item.image_url)}" alt="${esc(item.name)}" />`;
+    // Map food items to their image files
+    const imageMap = {
+      'Chicken Biryani': 'chicken-biryani.jpg',
+      'Mutton Biryani': 'mutton-biryani.jpg',
+      'Chapathi (2 pieces)': 'chapathi.jpg',
+      'Porotta (2 pieces)': 'chapathi.jpg', // Use chapathi as fallback
+      'Full Grill': 'full-grill.jpeg',
+      'Veg Rice': 'veg-rice.jpg',
+      'Chicken Rice': 'chicken-rice.webp'
+    };
+    
+    const filename = imageMap[item.name] || categoryEmoji(item.category);
+    
+    // If we have an image filename, return an img tag
+    if (filename.includes('.')) {
+      const imgPath = `/static/images/food/${filename}`;
+      return `<img src="${imgPath}" alt="${esc(item.name)}" class="food-image-thumbnail" />`;
     }
-    return categoryEmoji(item.category);
+    
+    // Fallback to emoji
+    return filename;
   }
 
   async function loadCanteens() {

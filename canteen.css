@@ -1,23 +1,24 @@
 /* ============================================================
    CAMPUS COPILOT — Smart Canteen Feature Styles
-   Uses existing CSS variables from style.css — no colour overrides
+   LIGHT THEME — MODERN FOOD ORDERING APPLICATION
    ============================================================ */
 
 /* ── Canteen shell layout ─────────────────────────────────── */
 .canteen-shell {
   min-height: 100vh;
+  background: linear-gradient(135deg, #f5fbf9 0%, #fdfbf7 100%);
 }
 
 /* ── Views (single-page routing) ─────────────────────────── */
 .canteen-view {
   display: none;
-  animation: canteenFadeIn 250ms ease;
+  animation: canteenFadeIn 300ms ease;
 }
 .canteen-view.active {
   display: block;
 }
 @keyframes canteenFadeIn {
-  from { opacity: 0; transform: translateY(8px); }
+  from { opacity: 0; transform: translateY(12px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
@@ -26,13 +27,14 @@
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 12px;
-  margin: 24px 0 20px;
+  gap: 16px;
+  margin: 28px 0 24px;
 }
 .canteen-view-header h2 {
   margin: 0;
-  font-size: 1.5rem;
-  color: var(--text);
+  font-size: 1.6rem;
+  color: #1a1a1a;
+  font-weight: 700;
 }
 
 .canteen-breadcrumb {
@@ -43,22 +45,25 @@
 }
 
 .back-btn {
-  background: var(--card-soft);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 6px 14px;
+  background: white;
+  border: 1.5px solid #e0e0e0;
+  border-radius: 12px;
+  padding: 8px 16px;
   font-size: 13px;
-  color: var(--primary);
+  color: #58BFB1;
   cursor: pointer;
-  transition: all 180ms ease;
+  transition: all 200ms ease;
+  font-weight: 600;
 }
 .back-btn:hover {
-  background: var(--primary-soft);
+  background: #f0fffe;
+  border-color: #58BFB1;
   transform: translateX(-2px);
+  box-shadow: 0 4px 12px rgba(88, 191, 177, 0.15);
 }
 
 .muted-text {
-  color: var(--muted);
+  color: #666;
   font-size: 14px;
   margin: 4px 0 0;
 }
@@ -78,16 +83,16 @@
 }
 
 .canteen-card {
-  background: var(--card);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow);
-  border: 1.5px solid var(--border);
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  border: 1px solid #f0f0f0;
   padding: 24px;
   cursor: pointer;
-  transition: all 220ms ease;
+  transition: all 250ms ease;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   position: relative;
   overflow: hidden;
   min-height: 280px;
@@ -98,63 +103,63 @@
   margin-top: auto;
 }
 .canteen-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 16px 40px rgba(0,0,0,0.1);
-  border-color: var(--primary);
+  transform: translateY(-6px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
+  border-color: #58BFB1;
 }
 .canteen-card::before {
   content: '';
   position: absolute;
   top: 0; left: 0; right: 0;
-  height: 4px;
-  background: linear-gradient(90deg, var(--primary), var(--ai-dark));
-  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  height: 3px;
+  background: linear-gradient(90deg, #58BFB1, #3DA898);
+  border-radius: 16px 16px 0 0;
 }
 
 .canteen-card-icon {
-  font-size: 2rem;
+  font-size: 2.4rem;
 }
 .canteen-card-name {
-  font-size: 1.1rem;
+  font-size: 1.2rem;
   font-weight: 700;
-  color: var(--text);
+  color: #1a1a1a;
 }
 .canteen-card-location {
-  font-size: 12px;
-  color: var(--muted);
+  font-size: 13px;
+  color: #666;
 }
 .canteen-card-desc {
-  font-size: 13px;
-  color: var(--muted);
+  font-size: 14px;
+  color: #666;
   line-height: 1.5;
 }
 .canteen-card-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 8px;
+  margin-top: 12px;
 }
 .canteen-status-badge {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   font-size: 12px;
-  font-weight: 600;
-  padding: 3px 10px;
+  font-weight: 700;
+  padding: 6px 12px;
   border-radius: 20px;
 }
 .canteen-status-badge.open {
-  background: var(--success-soft);
-  color: var(--success);
+  background: #e8f5e9;
+  color: #2e7d32;
 }
 .canteen-status-badge.closed {
-  background: var(--danger-soft);
-  color: var(--danger);
+  background: #ffebee;
+  color: #c62828;
 }
 .canteen-view-menu-btn {
   font-size: 13px;
-  color: var(--primary);
-  font-weight: 600;
+  color: #58BFB1;
+  font-weight: 700;
   background: none;
   border: none;
   cursor: pointer;
@@ -168,10 +173,10 @@
 /* Skeleton loader */
 .canteen-skeleton {
   height: 200px;
-  background: linear-gradient(90deg, var(--bg-strong) 25%, var(--bg-tint) 50%, var(--bg-strong) 75%);
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
   background-size: 200% 100%;
   animation: shimmer 1.4s infinite;
-  border-radius: var(--radius-lg);
+  border-radius: 16px;
 }
 @keyframes shimmer {
   0%  { background-position: 200% 0; }
@@ -182,24 +187,30 @@
 .category-filter {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 16px;
+  gap: 10px;
+  align-items: center;
 }
 .category-chip {
-  background: var(--card-soft);
-  border: 1.5px solid var(--border);
-  border-radius: 20px;
-  padding: 4px 14px;
-  font-size: 13px;
+  background: white;
+  border: 1.5px solid #d0d0d0;
+  border-radius: 24px;
+  padding: 8px 16px;
+  font-size: 14px;
   cursor: pointer;
-  transition: all 180ms ease;
-  color: var(--text);
+  transition: all 200ms ease;
+  color: #333;
+  font-weight: 600;
+  user-select: none;
 }
-.category-chip:hover,
+.category-chip:hover {
+  border-color: #58BFB1;
+  background: #f0fffe;
+}
 .category-chip.active {
-  background: var(--primary);
-  border-color: var(--primary);
+  background: #58BFB1;
+  border-color: #58BFB1;
   color: #fff;
+  box-shadow: 0 4px 12px rgba(88, 191, 177, 0.25);
 }
 
 .menu-search-wrap {
@@ -207,90 +218,105 @@
 }
 .menu-search {
   width: 100%;
-  max-width: 400px;
-  background: var(--card-soft);
-  border: 1.5px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 10px 16px;
-  font-size: 14px;
-  color: var(--text);
+  max-width: 500px;
+  background: white;
+  border: 1.5px solid #e0e0e0;
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-size: 15px;
+  color: #333;
   outline: none;
-  transition: border-color 180ms ease;
+  transition: all 200ms ease;
 }
 .menu-search:focus {
-  border-color: var(--primary);
+  border-color: #58BFB1;
+  box-shadow: 0 0 0 3px rgba(88, 191, 177, 0.1);
+  background: #fafafa;
 }
 
 .menu-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 20px;
 }
 
 .menu-item-card {
-  background: var(--card);
-  border-radius: var(--radius-md);
-  border: 1.5px solid var(--border);
-  padding: 14px;
+  background: white;
+  border-radius: 16px;
+  border: 1px solid #f0f0f0;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  transition: all 200ms ease;
+  gap: 0;
+  transition: all 250ms ease;
   position: relative;
   height: 100%;
-  min-height: 280px;
+  min-height: 360px;
+  color: #333;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 .menu-item-card:hover {
-  border-color: var(--primary);
-  box-shadow: var(--shadow-soft);
+  border-color: #58BFB1;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.12);
+  transform: translateY(-4px);
 }
 .menu-item-card.unavailable {
-  opacity: 0.55;
+  opacity: 0.6;
 }
 
 .menu-item-emoji {
-  font-size: 2rem;
+  font-size: 3rem;
+  text-align: center;
+  padding: 24px 16px;
+  background: linear-gradient(135deg, #f5fbf9 0%, #e8f5f2 100%);
 }
 .menu-item-name {
   font-weight: 700;
-  font-size: 15px;
-  color: var(--text);
+  font-size: 16px;
+  color: #1a1a1a;
+  padding: 0 14px;
+  margin-top: 12px;
 }
 .menu-item-desc {
-  font-size: 12px;
-  color: var(--muted);
-  line-height: 1.4;
-  min-height: 2.6em;
+  font-size: 13px;
+  color: #666;
+  line-height: 1.5;
+  min-height: 2.8em;
   flex: 1;
+  padding: 0 14px;
+  padding-top: 4px;
 }
 .menu-item-category {
-  font-size: 11px;
-  color: var(--primary);
-  font-weight: 600;
-  background: var(--primary-soft);
-  padding: 2px 8px;
-  border-radius: 10px;
+  font-size: 12px;
+  color: #58BFB1;
+  font-weight: 700;
+  background: #e8f5f2;
+  padding: 4px 10px;
+  border-radius: 8px;
   display: inline-block;
+  margin: 0 14px;
 }
 .menu-item-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 10px;
   margin-top: auto;
+  padding: 12px 14px 14px;
+  border-top: 1px solid #f5f5f5;
 }
 .menu-item-price {
   font-size: 18px;
   font-weight: 800;
-  color: var(--primary);
+  color: #58BFB1;
 }
 .unavailable-badge {
   font-size: 11px;
-  color: var(--danger);
-  font-weight: 600;
-  background: var(--danger-soft);
-  padding: 3px 8px;
-  border-radius: 10px;
+  color: #c62828;
+  font-weight: 700;
+  background: #ffebee;
+  padding: 4px 10px;
+  border-radius: 8px;
 }
 
 /* Quantity control */
@@ -298,12 +324,13 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-left: auto;
 }
 .qty-btn {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: var(--primary);
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: #58BFB1;
   color: #fff;
   border: none;
   font-size: 16px;
@@ -313,75 +340,79 @@
   justify-content: center;
   transition: all 180ms ease;
   padding: 0;
+  font-weight: 700;
 }
-.qty-btn:hover { background: var(--primary-dark); transform: scale(1.1); }
-.qty-btn.minus { background: var(--card-soft); color: var(--text); border: 1px solid var(--border); }
-.qty-btn.minus:hover { background: var(--danger-soft); color: var(--danger); }
+.qty-btn:hover { background: #3DA898; transform: scale(1.08); }
+.qty-btn.minus { background: #f5f5f5; color: #333; }
+.qty-btn.minus:hover { background: #ffebee; color: #c62828; }
 .qty-display {
-  min-width: 24px;
+  min-width: 28px;
   text-align: center;
   font-weight: 700;
   font-size: 15px;
 }
 .add-to-cart-btn {
-  background: var(--primary);
+  background: #58BFB1;
   color: #fff;
   border: none;
-  border-radius: var(--radius-md);
-  padding: 6px 14px;
+  border-radius: 8px;
+  padding: 8px 12px;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
   transition: all 180ms ease;
+  white-space: nowrap;
 }
-.add-to-cart-btn:hover { background: var(--primary-dark); transform: translateY(-1px); }
+.add-to-cart-btn:hover { background: #3DA898; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(88, 191, 177, 0.3); }
 
 /* ── Cart drawer ──────────────────────────────────────────── */
 .cart-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
-  background: var(--primary);
+  gap: 8px;
+  background: #58BFB1;
   color: #fff;
   border: none;
-  border-radius: var(--radius-md);
-  padding: 8px 18px;
-  font-weight: 600;
+  border-radius: 10px;
+  padding: 10px 20px;
+  font-weight: 700;
+  font-size: 15px;
   cursor: pointer;
-  transition: all 180ms ease;
+  transition: all 200ms ease;
   position: relative;
+  box-shadow: 0 4px 12px rgba(88, 191, 177, 0.2);
 }
-.cart-btn:hover { background: var(--primary-dark); }
+.cart-btn:hover { background: #3DA898; transform: translateY(-2px); box-shadow: 0 6px 16px rgba(88, 191, 177, 0.3); }
 .cart-badge {
   background: #fff;
-  color: var(--primary);
+  color: #58BFB1;
   border-radius: 50%;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 800;
 }
 
 .cart-fab {
   position: fixed;
   bottom: 24px;
   right: 24px;
-  background: var(--primary);
+  background: #58BFB1;
   color: #fff;
   border: none;
   border-radius: 30px;
-  padding: 12px 22px;
-  font-size: 15px;
+  padding: 14px 28px;
+  font-size: 16px;
   font-weight: 700;
   cursor: pointer;
-  box-shadow: 0 8px 24px rgba(88,191,177,0.4);
+  box-shadow: 0 8px 24px rgba(88, 191, 177, 0.4);
   z-index: 200;
-  transition: all 200ms ease;
+  transition: all 250ms ease;
 }
-.cart-fab:hover { transform: translateY(-3px); box-shadow: 0 14px 32px rgba(88,191,177,0.5); }
+.cart-fab:hover { transform: translateY(-4px); box-shadow: 0 14px 36px rgba(88, 191, 177, 0.5); }
 
 .cart-drawer {
   position: fixed;
@@ -389,8 +420,8 @@
   width: 360px;
   max-width: 100vw;
   height: 100vh;
-  background: var(--card);
-  box-shadow: -8px 0 40px rgba(0,0,0,0.12);
+  background: white;
+  box-shadow: -8px 0 40px rgba(0, 0, 0, 0.12);
   z-index: 300;
   display: flex;
   flex-direction: column;

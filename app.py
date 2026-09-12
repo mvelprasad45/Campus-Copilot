@@ -1753,14 +1753,13 @@ def init_canteen_tables():
                     # seed menu items per canteen
                     menus = {
                         1: [
-                            ("Meals","Full South Indian thali",70,"Meals"),
-                            ("Fried Rice","Egg fried rice with gravy",80,"Rice & Noodles"),
-                            ("Sandwich","Grilled veg sandwich",50,"Snacks"),
-                            ("Burger","Veg burger with fries",60,"Snacks"),
-                            ("Tea","Hot masala tea",15,"Beverages"),
-                            ("Juice","Fresh fruit juice",30,"Beverages"),
-                            ("Chapati","Soft chapati with dal",40,"Meals"),
-                            ("Samosa","Crispy veg samosa (2 pcs)",20,"Snacks"),
+                            ("Chicken Biryani","Long-grain basmati rice with tender chicken pieces, aromatic spices, and traditional garnish",120,"Meals","images/food/chicken-biryani.jpg"),
+                            ("Mutton Biryani","Premium basmati rice cooked with slow-cooked mutton, fragrant spices, and authentic flavor",140,"Meals","images/food/mutton-biryani.jpg"),
+                            ("Chapathi (2 pieces)","Two soft Indian chapatis served fresh, perfect with any curry or gravy",50,"Meals","images/food/chapathi.jpg"),
+                            ("Porotta (2 pieces)","Two flaky, layered Kerala-style porottas, crispy and delicious",50,"Meals","images/food/porotta.jpg"),
+                            ("Full Grill","Complete grilled chicken, perfectly roasted with spices, restaurant-style presentation",400,"Meals","images/food/full-grill.jpg"),
+                            ("Veg Rice","Aromatic vegetable fried rice with fresh carrots, peas, beans, and authentic spices",100,"Rice & Noodles","images/food/veg-rice.jpg"),
+                            ("Chicken Rice","Flavorful chicken fried rice with tender chicken pieces, fresh vegetables, and perfect seasoning",120,"Rice & Noodles","images/food/chicken-rice.jpg"),
                         ],
                         2: [
                             ("Pizza","Veg pizza slice",100,"Fast Food"),
@@ -1790,10 +1789,18 @@ def init_canteen_tables():
                     idx = len(sample_canteens) - len([x for x in sample_canteens if x == sc])
                     slot_menu = menus.get(cid, menus[1])
                     for item in slot_menu:
-                        cur.execute(
-                            "INSERT INTO menu_items (canteen_id, name, description, price, category) VALUES (%s,%s,%s,%s,%s)",
-                            (cid, item[0], item[1], item[2], item[3])
-                        )
+                        # Handle both old format (4 elements) and new format (5 elements with image_url)
+                        if len(item) == 5:
+                            cur.execute(
+                                "INSERT INTO menu_items (canteen_id, name, description, price, category, image_url) VALUES (%s,%s,%s,%s,%s,%s)",
+                                (cid, item[0], item[1], item[2], item[3], item[4])
+                            )
+                        else:
+                            cur.execute(
+                                "INSERT INTO menu_items (canteen_id, name, description, price, category) VALUES (%s,%s,%s,%s,%s)",
+                                (cid, item[0], item[1], item[2], item[3])
+                            )
+
 
         conn.commit()
     except Exception:
