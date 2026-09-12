@@ -201,10 +201,10 @@
       'Chicken Biryani': 'chicken-biryani.jpg',
       'Mutton Biryani': 'mutton-biryani.jpg',
       'Chapathi (2 pieces)': 'chapathi.jpg',
-      'Porotta (2 pieces)': 'chapathi.jpg', // Use chapathi as fallback
-      'Full Grill': 'full-grill.jpeg',
+      'Porotta (2 pieces)': 'porotta.jpg',
+      'Full Grill': 'full-grill.jpg',
       'Veg Rice': 'veg-rice.jpg',
-      'Chicken Rice': 'chicken-rice.webp'
+      'Chicken Rice': 'chicken-rice.jpg'
     };
     
     const filename = imageMap[item.name] || categoryEmoji(item.category);
